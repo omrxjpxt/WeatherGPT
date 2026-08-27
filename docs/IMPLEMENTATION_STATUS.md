@@ -1,5 +1,6 @@
 # WeatherGPT Implementation Status
 
+> **Notice:** For the complete, authoritative overview of the project, including SIH alignment, architecture, and core features, refer to the [Master Project Document](../WEATHERGPT_MASTER.md) in the project root.
 ## Phase 1–5: Complete
 - **Phase 1 (Foundation):** Set up Flutter project, disabled code gen.
 - **Phase 2 (Design System):** Created color and typography tokens, layout tokens, and reusable cards/badges matching Stitch. Bundled Plus Jakarta Sans and Work Sans.
