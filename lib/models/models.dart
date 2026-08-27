@@ -14,6 +14,13 @@ enum AlertSeverity { advisory, watch, warning, emergency }
 
 enum ConfidenceLevel { low, medium, high, veryHigh }
 
+enum TripStatus {
+  success,
+  routingUnavailable,
+  weatherUnavailable,
+  degraded,
+}
+
 // ── Core Models ──
 
 class TripRequest {
@@ -60,22 +67,24 @@ class TripRequest {
 
 class TripResponse {
   final String? analysisId;
+  final TripStatus status;
   final TripRequest request;
-  final RiskAssessment risk;
+  final RiskAssessment? risk;
   final List<RouteSegment> route;
-  final Recommendation recommendation;
+  final Recommendation? recommendation;
   final List<ModeOption> modeOptions;
   final List<Hazard> hazards;
   final List<DataSource> sources;
   final Duration estimatedDuration;
   final double distanceKm;
 
-  const TripResponse({
+  TripResponse({
     this.analysisId,
+    this.status = TripStatus.success,
     required this.request,
-    required this.risk,
+    this.risk,
     required this.route,
-    required this.recommendation,
+    this.recommendation,
     required this.modeOptions,
     required this.hazards,
     required this.sources,
@@ -83,18 +92,40 @@ class TripResponse {
     required this.distanceKm,
   });
 
-  factory TripResponse.fromJson(Map<String, dynamic> json) => TripResponse(
-        analysisId: json['analysisId'] as String?,
-        request: TripRequest.fromJson(json['request'] as Map<String, dynamic>),
-        risk: RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>),
-        route: (json['route'] as List).map((e) => RouteSegment.fromJson(e as Map<String, dynamic>)).toList(),
-        recommendation: Recommendation.fromJson(json['recommendation'] as Map<String, dynamic>),
-        modeOptions: json['modeOptions'] == null ? [] : (json['modeOptions'] as List).map((e) => ModeOption.fromJson(e as Map<String, dynamic>)).toList(),
-        hazards: (json['hazards'] as List).map((e) => Hazard.fromJson(e as Map<String, dynamic>)).toList(),
-        sources: (json['sources'] as List).map((e) => DataSource.fromJson(e as Map<String, dynamic>)).toList(),
-        estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
-        distanceKm: (json['distanceKm'] as num).toDouble(),
-      );
+  factory TripResponse.fromJson(Map<String, dynamic> json) {
+    return TripResponse(
+      analysisId: json['analysisId'] as String?,
+      status: TripStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => TripStatus.success,
+      ),
+      request: TripRequest.fromJson(json['request'] as Map<String, dynamic>),
+      risk: json['risk'] != null ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>) : null,
+      route: (json['route'] as List).map((e) => RouteSegment.fromJson(e as Map<String, dynamic>)).toList(),
+      recommendation: json['recommendation'] != null ? Recommendation.fromJson(json['recommendation'] as Map<String, dynamic>) : null,
+      modeOptions: json['modeOptions'] == null ? [] : (json['modeOptions'] as List).map((e) => ModeOption.fromJson(e as Map<String, dynamic>)).toList(),
+      hazards: (json['hazards'] as List).map((e) => Hazard.fromJson(e as Map<String, dynamic>)).toList(),
+      sources: (json['sources'] as List).map((e) => DataSource.fromJson(e as Map<String, dynamic>)).toList(),
+      estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
+      distanceKm: (json['distanceKm'] as num).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'analysisId': analysisId,
+      'status': status.name,
+      'request': request.toJson(),
+      'risk': risk?.toJson(),
+      'route': route.map((e) => e.toJson()).toList(),
+      'recommendation': recommendation?.toJson(),
+      'modeOptions': modeOptions.map((e) => e.toJson()).toList(),
+      'hazards': hazards.map((e) => e.toJson()).toList(),
+      'sources': sources.map((e) => e.toJson()).toList(),
+      'estimatedDuration': estimatedDuration.inSeconds.toString(),
+      'distanceKm': distanceKm,
+    };
+  }
 }
 
 class RiskAssessment {
@@ -119,6 +150,14 @@ class RiskAssessment {
         factors: (json['factors'] as List).map((e) => RiskFactor.fromJson(e as Map<String, dynamic>)).toList(),
         summary: json['summary'] as String,
       );
+      
+  Map<String, dynamic> toJson() => {
+    'overallScore': overallScore,
+    'level': level.name,
+    'confidence': confidence.toJson(),
+    'factors': factors.map((e) => e.toJson()).toList(),
+    'summary': summary,
+  };
 }
 
 class RiskFactor {
@@ -143,6 +182,14 @@ class RiskFactor {
         level: RiskLevel.values.firstWhere((e) => e.name == json['level']),
         weight: (json['weight'] as num).toDouble(),
       );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'description': description,
+    'score': score,
+    'level': level.name,
+    'weight': weight,
+  };
 }
 
 class RouteSegment {
@@ -173,6 +220,16 @@ class RouteSegment {
         description: json['description'] as String?,
         weather: json['weather'] != null ? WeatherPoint.fromJson(json['weather'] as Map<String, dynamic>) : null,
       );
+
+  Map<String, dynamic> toJson() => {
+    'startLat': startLat,
+    'startLng': startLng,
+    'endLat': endLat,
+    'endLng': endLng,
+    'riskLevel': riskLevel.name,
+    'description': description,
+    'weather': weather?.toJson(),
+  };
 }
 
 class WeatherPoint {
@@ -210,6 +267,18 @@ class WeatherPoint {
         condition: json['condition'] as String,
         icon: json['icon'] as String,
       );
+
+  Map<String, dynamic> toJson() => {
+    'time': time.toIso8601String(),
+    'temperature': temperature,
+    'precipitation': precipitation,
+    'humidity': humidity,
+    'windSpeed': windSpeed,
+    'windGusts': windGusts,
+    'visibility': visibility,
+    'condition': condition,
+    'icon': icon,
+  };
 }
 
 class Hazard {
@@ -262,6 +331,18 @@ class Hazard {
       source: data['sourceClass'] != null ? '${data['sourceClass']}' : data['sourceName'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type.name,
+    'title': title,
+    'description': description,
+    'lat': lat,
+    'lng': lng,
+    'severity': severity.name,
+    'reportedAt': reportedAt?.toIso8601String(),
+    'sourceName': source,
+  };
 }
 
 class OfficialAlert {
@@ -306,55 +387,91 @@ class OfficialAlert {
 class ModeOption {
   final TransportMode mode;
   final Duration estimatedDuration;
-  final RiskAssessment risk;
+  final RiskAssessment? risk;
   final double distanceKm;
   final String? recommendation;
   final List<String> highlights;
 
-  const ModeOption({
+  ModeOption({
     required this.mode,
     required this.estimatedDuration,
-    required this.risk,
+    this.risk,
     required this.distanceKm,
     this.recommendation,
     required this.highlights,
   });
 
-  factory ModeOption.fromJson(Map<String, dynamic> json) => ModeOption(
-        mode: TransportMode.values.firstWhere((e) => e.name == json['mode']),
-        estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
-        risk: RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>),
-        distanceKm: (json['distanceKm'] as num).toDouble(),
-        recommendation: json['recommendation'] as String?,
-        highlights: (json['highlights'] as List).map((e) => e.toString()).toList(),
-      );
+  factory ModeOption.fromJson(Map<String, dynamic> json) {
+    return ModeOption(
+      mode: TransportMode.values.firstWhere(
+        (e) => e.name == json['mode'],
+        orElse: () => TransportMode.car,
+      ),
+      estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
+      risk: json['risk'] != null ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>) : null,
+      distanceKm: (json['distanceKm'] as num).toDouble(),
+      recommendation: json['recommendation'] as String?,
+      highlights: (json['highlights'] as List).map((e) => e as String).toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'mode': mode.name,
+      'estimatedDuration': estimatedDuration.inSeconds.toString(),
+      'risk': risk?.toJson(),
+      'distanceKm': distanceKm,
+      'recommendation': recommendation,
+      'highlights': highlights,
+    };
+  }
 }
 
 class ScenarioResult {
   final String? scenarioId;
+  final TripStatus status;
   final DateTime departureTime;
-  final RiskAssessment risk;
+  final RiskAssessment? risk;
   final Duration estimatedDuration;
-  final String recommendation;
+  final String? recommendation;
   final List<RiskFactor> changedFactors;
 
-  const ScenarioResult({
+  ScenarioResult({
     this.scenarioId,
+    this.status = TripStatus.success,
     required this.departureTime,
-    required this.risk,
+    this.risk,
     required this.estimatedDuration,
-    required this.recommendation,
+    this.recommendation,
     required this.changedFactors,
   });
 
-  factory ScenarioResult.fromJson(Map<String, dynamic> json) => ScenarioResult(
-        scenarioId: json['scenarioId'] as String?,
-        departureTime: DateTime.parse(json['departureTime'] as String).toLocal(),
-        risk: RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>),
-        estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
-        recommendation: json['recommendation'] as String,
-        changedFactors: (json['changedFactors'] as List).map((e) => RiskFactor.fromJson(e as Map<String, dynamic>)).toList(),
-      );
+  factory ScenarioResult.fromJson(Map<String, dynamic> json) {
+    return ScenarioResult(
+      scenarioId: json['scenarioId'] as String?,
+      status: TripStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => TripStatus.success,
+      ),
+      departureTime: DateTime.parse(json['departureTime'] as String).toLocal(),
+      risk: json['risk'] != null ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>) : null,
+      estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
+      recommendation: json['recommendation'] as String?,
+      changedFactors: (json['changedFactors'] as List).map((i) => RiskFactor.fromJson(i as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'scenarioId': scenarioId,
+      'status': status.name,
+      'departureTime': departureTime.toIso8601String(),
+      'risk': risk?.toJson(),
+      'estimatedDuration': estimatedDuration.inSeconds.toString(),
+      'recommendation': recommendation,
+      'changedFactors': changedFactors.map((e) => e.toJson()).toList(),
+    };
+  }
 }
 
 class Confidence {
@@ -370,6 +487,11 @@ class Confidence {
         level: ConfidenceLevel.values.firstWhere((e) => e.name == json['level']),
         explanation: json['explanation'] as String,
       );
+      
+  Map<String, dynamic> toJson() => {
+        'level': level.name,
+        'explanation': explanation,
+      };
 }
 
 class Recommendation {
@@ -394,6 +516,14 @@ class Recommendation {
         suggestedMode: json['suggestedMode'] != null ? TransportMode.values.firstWhere((e) => e.name == json['suggestedMode']) : null,
         suggestedDepartureTime: json['suggestedDepartureTime'] != null ? DateTime.parse(json['suggestedDepartureTime'] as String).toLocal() : null,
       );
+
+  Map<String, dynamic> toJson() => {
+        'headline': headline,
+        'body': body,
+        'alternativeAction': alternativeAction,
+        'suggestedMode': suggestedMode?.name,
+        'suggestedDepartureTime': suggestedDepartureTime?.toUtc().toIso8601String(),
+      };
 }
 
 class DataSource {
@@ -412,6 +542,12 @@ class DataSource {
         type: json['type'] as String,
         lastUpdated: DateTime.parse(json['lastUpdated'] as String).toLocal(),
       );
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'type': type,
+        'lastUpdated': lastUpdated.toUtc().toIso8601String(),
+      };
 }
 
 class HistoricalEvent {

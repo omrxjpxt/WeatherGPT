@@ -118,19 +118,23 @@ class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
                     key: ValueKey(idx),
                     child: Row(
                       children: [
-                        RiskScoreIndicator(
-                          score: current.risk.overallScore,
-                          level: current.risk.level,
-                        ),
+                        if (current.risk != null) ...[
+                          RiskScoreIndicator(
+                            score: current.risk!.overallScore,
+                            level: current.risk!.level,
+                            size: 64,
+                          ),
+                        ],
                         const SizedBox(width: Spacing.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              RiskBadge(level: current.risk.level),
-                              const SizedBox(height: 8),
+                              if (current.risk != null)
+                                RiskBadge(level: current.risk!.level),
+                              const SizedBox(height: 4),
                               Text(
-                                current.recommendation,
+                                current.recommendation ?? '',
                                 style: AppTypography.bodySm.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
@@ -262,8 +266,8 @@ class _RiskTimeline extends StatelessWidget {
             final idx = entry.key;
             final scenario = entry.value;
             final isSelected = idx == selectedIndex;
-            final height = (scenario.risk.overallScore / 100) * 120 + 20;
-            final color = _colorForRisk(scenario.risk.level);
+            final height = scenario.risk != null ? (scenario.risk!.overallScore / 100) * 120 + 20 : 20.0;
+            final color = scenario.risk != null ? _colorForRisk(scenario.risk!.level) : AppColors.outline;
 
             return Padding(
               padding: EdgeInsets.only(right: idx < scenarios.length - 1 ? 4 : 0),
@@ -271,13 +275,14 @@ class _RiskTimeline extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   if (isSelected)
-                    Text(
-                      '${scenario.risk.overallScore}',
-                      style: AppTypography.labelCaps.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w700,
+                    if (scenario.risk != null)
+                      Text(
+                        '${scenario.risk!.overallScore}',
+                        style: AppTypography.labelMd.copyWith(
+                          color: isSelected ? AppColors.surface : color,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
                   const SizedBox(height: 4),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 300),

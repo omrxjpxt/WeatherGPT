@@ -38,21 +38,34 @@ class RiskConfidenceScreen extends ConsumerWidget {
               WeatherCard(
                 child: Column(
                   children: [
-                    RiskScoreIndicator(
-                      score: trip.risk.overallScore,
-                      level: trip.risk.level,
-                      size: 120,
-                    ),
-                    const SizedBox(height: Spacing.stackMd),
-                    RiskBadge(level: trip.risk.level),
-                    const SizedBox(height: Spacing.stackSm),
-                    Text(
-                      trip.risk.summary,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodySm.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                    if (trip.risk != null)
+                      RiskScoreIndicator(
+                        score: trip.risk!.overallScore,
+                        level: trip.risk!.level,
+                        size: 120,
                       ),
-                    ),
+                    const SizedBox(height: Spacing.stackMd),
+                    if (trip.risk != null)
+                      RiskBadge(level: trip.risk!.level),
+                    const SizedBox(height: Spacing.stackSm),
+                    if (trip.risk != null)
+                      Text(
+                        trip.risk!.summary,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.bodySm.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      )
+                    else
+                      Text(
+                        trip.status == TripStatus.routingUnavailable
+                            ? 'Routing is currently unavailable.'
+                            : 'Weather data is currently unavailable.',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.bodySm.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -71,7 +84,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
                       ),
                       child: Center(
                         child: Text(
-                          trip.risk.confidence.level.name.toUpperCase(),
+                          trip.risk?.confidence.level.name.toUpperCase() ?? 'UNKNOWN',
                           style: AppTypography.labelMd.copyWith(
                             color: AppColors.tertiaryContainer,
                             fontWeight: FontWeight.w700,
@@ -85,7 +98,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Confidence: ${trip.risk.confidence.level.name.toUpperCase()}',
+                            trip.risk != null ? 'Confidence: ${trip.risk!.confidence.level.name.toUpperCase()}' : 'Confidence: UNKNOWN',
                             style: AppTypography.labelMd.copyWith(
                               color: AppColors.primaryText,
                               fontWeight: FontWeight.w600,
@@ -93,7 +106,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            trip.risk.confidence.explanation,
+                            trip.risk?.confidence.explanation ?? 'Data unavailable',
                             style: AppTypography.bodySm.copyWith(
                               color: AppColors.onSurfaceVariant,
                             ),
@@ -109,7 +122,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
               // ── Risk Factors ──
               const SectionTitle(title: 'Risk Factors'),
               const SizedBox(height: Spacing.stackMd),
-              ...trip.risk.factors.map((f) => _buildFactorCard(f)),
+              if (trip.risk != null) ...trip.risk!.factors.map((f) => _buildFactorCard(f)),
               const SizedBox(height: Spacing.stackLg),
 
               // ── Data Sources ──

@@ -30,30 +30,26 @@ class MockTripRepository implements TripRepository {
     List<DateTime> departureTimes,
   ) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    return departureTimes.map((time) {
-      final score = _riskForTime(time, request.mode);
-      return ScenarioResult(
-        departureTime: time,
-        risk: _buildRisk(score),
-        estimatedDuration: _etaForMode(request.mode),
-        recommendation: score >= 70
-            ? 'Heavy rainfall expected. Consider delaying departure.'
-            : score >= 40
-                ? 'Light showers possible. Carry rain gear.'
-                : 'Clear conditions. Good to go!',
-        changedFactors: [
-          RiskFactor(
-            name: 'Precipitation',
-            description: score >= 70
-                ? 'Heavy rainfall 8:20–8:45 AM along NH-48'
-                : 'Light or no rainfall expected',
-            score: score,
-            level: _levelForScore(score),
-            weight: 0.4,
-          ),
-        ],
-      );
-    }).toList();
+    final mockResponse = await analyzeTrip(request);
+    final times = departureTimes;
+    return [
+      ScenarioResult(
+        scenarioId: 'sc_mock_1',
+        departureTime: times[0],
+        risk: mockResponse.risk,
+        estimatedDuration: const Duration(hours: 1),
+        recommendation: null,
+        changedFactors: [],
+      ),
+      ScenarioResult(
+        scenarioId: 'sc_mock_2',
+        departureTime: times[1],
+        risk: mockResponse.risk,
+        estimatedDuration: const Duration(hours: 1),
+        recommendation: null,
+        changedFactors: [],
+      ),
+    ];
   }
 
   @override
@@ -344,7 +340,7 @@ class MockWeatherRepository implements WeatherRepository {
 /// Mock implementation of RiskRepository
 class MockRiskRepository implements RiskRepository {
   @override
-  Future<RiskAssessment> getRiskAssessment(TripRequest request) async {
+  Future<RiskAssessment?> getRiskAssessment(TripRequest request) async {
     final tripRepo = MockTripRepository();
     final response = await tripRepo.analyzeTrip(request);
     return response.risk;

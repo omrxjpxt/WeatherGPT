@@ -10,6 +10,8 @@ from app.providers.weather.base import WeatherProvider
 from app.providers.routing.base import RoutingProvider
 from app.providers.routing.mock import MockRoutingProvider
 from app.providers.alerts.base import AlertProvider
+from app.models.hazard import Hazard
+from app.models.enums import RiskLevel
 
 class TripService:
     def __init__(
@@ -122,25 +124,14 @@ class TripService:
         
         # 1.1 If both weather sources are unavailable, fallback gracefully.
         if not comparison.primary_timeline:
-            from app.models.risk import RiskAssessment, Confidence, RiskFactor
-            from app.models.enums import RiskLevel, ConfidenceLevel
+            from app.models.enums import TripStatus
             return TripResponse(
                 analysis_id=str(uuid.uuid4()),
+                status=TripStatus.weather_unavailable,
                 request=request,
-                risk=RiskAssessment(
-                    overall_score=100,
-                    level=RiskLevel.severe,
-                    confidence=Confidence(level=ConfidenceLevel.low, explanation="Weather data unavailable"),
-                    factors=[RiskFactor(name="Weather Error", description="Could not fetch weather data", score=100, level=RiskLevel.severe, weight=1.0)],
-                    summary="Weather Unavailable"
-                ),
+                risk=None,
                 route=[],
-                recommendation=Recommendation(
-                    headline="Weather Unavailable",
-                    body="Could not fetch weather data from any source.",
-                    suggested_mode=None,
-                    suggested_departure_time=None,
-                ),
+                recommendation=None,
                 mode_options=[],
                 hazards=[],
                 sources=[],
@@ -158,25 +149,14 @@ class TripService:
             route = routes[0]  # Take the primary route for the decision engine
             routing_status = active_routing_provider.route_status.value
         except Exception as e:
-            from app.models.risk import RiskAssessment, Confidence, RiskFactor
-            from app.models.enums import RiskLevel, ConfidenceLevel
+            from app.models.enums import TripStatus
             return TripResponse(
                 analysis_id=analysis_id,
+                status=TripStatus.routing_unavailable,
                 request=request,
-                risk=RiskAssessment(
-                    overall_score=100,
-                    level=RiskLevel.severe,
-                    confidence=Confidence(level=ConfidenceLevel.high, explanation="Routing unavailable"),
-                    factors=[RiskFactor(name="Routing Error", description="Could not calculate route", score=100, level=RiskLevel.severe, weight=1.0)],
-                    summary="Routing Unavailable"
-                ),
+                risk=None,
                 route=[],
-                recommendation=Recommendation(
-                    headline="Routing Unavailable",
-                    body=f"Could not calculate route: {str(e)}",
-                    suggested_mode=None,
-                    suggested_departure_time=None,
-                ),
+                recommendation=None,
                 mode_options=[],
                 hazards=[],
                 sources=[
@@ -248,7 +228,19 @@ class TripService:
                 suggested_departure_time=result.suggested_time,
             ),
             mode_options=mode_options,
-            hazards=result.hazards,
+            hazards=[
+                Hazard(
+                    id=th.hazard.id,
+                    type=th.hazard.type,
+                    title=th.hazard.id.replace('-', ' ').title(),
+                    description=f"{th.hazard.type.name} reported by {th.hazard.source_name}",
+                    lat=th.hazard.lat,
+                    lng=th.hazard.lng,
+                    severity=RiskLevel.moderate,
+                    reported_at=th.hazard.reported_timestamp,
+                    source=th.hazard.source_name
+                ) for th in result.hazards
+            ],
             sources=sources,
             estimated_duration=result.total_duration,
             distance_km=result.total_distance_km

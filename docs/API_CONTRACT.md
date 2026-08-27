@@ -22,7 +22,9 @@ Returns service status, version, and environment.
 ### 2. Trips
 `POST /trips/analyze`
 **Request:** `TripRequest` (origin, destination, departure_time, mode)
-**Response:** `TripResponse` (analysis_id, risk, route, recommendation, mode_options, hazards, sources, estimated_duration, distance_km)
+**Response:** `TripResponse` (analysis_id, status, request, risk (optional), route, recommendation (optional), mode_options, hazards, sources, estimated_duration, distance_km)
+
+The `status` field returns a `TripStatus` string enum (`success`, `routing_unavailable`, `weather_unavailable`, `degraded`). Clients must check `status` before assuming `risk` or `recommendation` are non-null.
 
 ### 3. Scenarios
 `POST /scenarios/evaluate`

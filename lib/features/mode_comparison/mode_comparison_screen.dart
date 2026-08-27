@@ -70,7 +70,8 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
                               ),
                             ),
                             const Spacer(),
-                            RiskBadge(level: current.risk.level),
+                           if (current.risk != null)
+                            RiskBadge(level: current.risk!.level),
                           ],
                         ),
                         const SizedBox(height: Spacing.stackMd),
@@ -82,9 +83,10 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
                               label: 'ETA',
                               value: '${current.estimatedDuration.inMinutes} min',
                             ),
+                          if (current.risk != null)
                             _StatItem(
                               label: 'Risk',
-                              value: '${current.risk.overallScore}/100',
+                              value: '${current.risk!.overallScore}/100',
                             ),
                             _StatItem(
                               label: 'Distance',
@@ -155,7 +157,7 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
 
   Widget _buildModeComparisonRow(ModeOption mode) {
     final isActive = mode.mode == _selected;
-    final color = _colorForRisk(mode.risk.level);
+    final color = mode.risk != null ? _colorForRisk(mode.risk!.level) : AppColors.outline;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: GestureDetector(
@@ -197,22 +199,25 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
                 width: 60,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: mode.risk.overallScore / 100,
-                    backgroundColor: AppColors.surfaceContainerHigh,
-                    valueColor: AlwaysStoppedAnimation(color),
-                    minHeight: 6,
-                  ),
+                  child: mode.risk != null
+                    ? LinearProgressIndicator(
+                        value: mode.risk!.overallScore / 100,
+                        backgroundColor: AppColors.surfaceContainerHigh,
+                        valueColor: AlwaysStoppedAnimation(color),
+                        minHeight: 6,
+                      )
+                    : const SizedBox.shrink(),
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '${mode.risk.overallScore}',
-                style: AppTypography.labelMd.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
+              if (mode.risk != null)
+                Text(
+                  '${mode.risk!.overallScore}',
+                  style: AppTypography.labelMd.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

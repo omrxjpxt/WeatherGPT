@@ -54,11 +54,11 @@ class HttpTripRepository implements TripRepository {
           estimatedDuration: tripResponse.estimatedDuration,
           risk: tripResponse.risk,
           distanceKm: tripResponse.distanceKm,
-          recommendation: mode == TransportMode.metro ? 'Demo Transit Route' : null,
-          highlights: tripResponse.risk.factors.map((f) => '${f.name}: ${f.description}').toList(),
+          recommendation: tripResponse.recommendation?.headline,
+          highlights: tripResponse.risk?.factors.map((f) => '${f.name}: ${f.description}').toList() ?? [],
         );
       } catch (e) {
-        debugPrint('Failed to get comparison for mode \$mode: \$e');
+        debugPrint('Failed to get comparison for mode $mode: $e');
         return null;
       }
     });

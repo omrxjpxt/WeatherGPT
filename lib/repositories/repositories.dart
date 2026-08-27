@@ -24,7 +24,7 @@ abstract class WeatherRepository {
 }
 
 abstract class RiskRepository {
-  Future<RiskAssessment> getRiskAssessment(TripRequest request);
+  Future<RiskAssessment?> getRiskAssessment(TripRequest request);
   Future<List<Hazard>> getNearbyHazards(double lat, double lng, {double radiusKm = 10});
 }
 

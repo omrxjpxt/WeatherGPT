@@ -6,6 +6,12 @@ class TransportMode(str, Enum):
     metro = "metro"
     walk = "walk"
 
+class TripStatus(str, Enum):
+    success = "success"
+    routing_unavailable = "routing_unavailable"
+    weather_unavailable = "weather_unavailable"
+    degraded = "degraded"
+
 class RiskLevel(str, Enum):
     low = "low"
     moderate = "moderate"

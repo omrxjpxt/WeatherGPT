@@ -50,6 +50,8 @@
 - **Testing**: Exhaustive unit tests (47 total, all passing) covering engine determinism, spatial matching, routing, hazards, and alert override policy logic.
 
 ## Phase 12: Flutter ↔ FastAPI Integration
+- 🟢 `TripStatus` implemented for graceful degradation (routing/weather failures don't produce `100` risk score)
+- 🟢 Flutter UI handles nullable `risk` and `recommendation` in missing data states
 - **API Client**: Built `ApiClient` with typed `ApiException` handling partial network degradation, routing failure, and validation errors.
 - **Dynamic Config**: `ApiConfig` setup to properly route localhost/10.0.2.2 depending on iOS/Android development target.
 - **HTTP Repositories**: Replaced Mock repositories with HTTP-backed repositories calling FastAPI endpoints for Trips, Weather, Hazards, Alerts, and Scenarios.

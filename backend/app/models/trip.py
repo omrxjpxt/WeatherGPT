@@ -4,7 +4,7 @@ from pydantic import Field
 import uuid
 
 from app.models.base import WeatherBaseModel
-from app.models.enums import TransportMode
+from app.models.enums import TransportMode, TripStatus
 from app.models.risk import RiskAssessment
 from app.models.route import RouteSegment
 from app.models.hazard import Hazard
@@ -19,7 +19,7 @@ class Recommendation(WeatherBaseModel):
 class ModeOption(WeatherBaseModel):
     mode: TransportMode
     estimated_duration: timedelta
-    risk: RiskAssessment
+    risk: Optional[RiskAssessment] = None
     distance_km: float
     recommendation: Optional[str] = None
     highlights: List[str]
@@ -38,10 +38,11 @@ class TripRequest(WeatherBaseModel):
 
 class TripResponse(WeatherBaseModel):
     analysis_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    status: TripStatus = TripStatus.success
     request: TripRequest
-    risk: RiskAssessment
+    risk: Optional[RiskAssessment] = None
     route: List[RouteSegment]
-    recommendation: Recommendation
+    recommendation: Optional[Recommendation] = None
     mode_options: List[ModeOption]
     hazards: List[Hazard]
     sources: List[DataSource]

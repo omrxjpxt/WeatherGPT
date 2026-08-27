@@ -9,7 +9,7 @@ class HttpRiskRepository implements RiskRepository {
   HttpRiskRepository(this._apiClient, this._tripRepository);
 
   @override
-  Future<RiskAssessment> getRiskAssessment(TripRequest request) async {
+  Future<RiskAssessment?> getRiskAssessment(TripRequest request) async {
     // Risk assessment is inherently tied to a trip in the backend architecture.
     // We delegate to the TripRepository.
     final tripResponse = await _tripRepository.analyzeTrip(request);

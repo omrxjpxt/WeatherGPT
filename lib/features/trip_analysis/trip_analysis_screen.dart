@@ -105,7 +105,8 @@ class _TripAnalysisBody extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        RiskBadge(level: trip.risk.level),
+                        if (trip.risk != null)
+                          RiskBadge(level: trip.risk!.level),
                       ],
                     ),
                   ),
@@ -156,25 +157,36 @@ class _TripAnalysisBody extends StatelessWidget {
     return WeatherCard(
       child: Row(
         children: [
-          RiskScoreIndicator(
-            score: trip.risk.overallScore,
-            level: trip.risk.level,
-          ),
+          if (trip.risk != null)
+            RiskScoreIndicator(
+              score: trip.risk!.overallScore,
+              level: trip.risk!.level,
+            ),
           const SizedBox(width: Spacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RiskBadge(level: trip.risk.level),
+                if (trip.risk != null) RiskBadge(level: trip.risk!.level),
                 const SizedBox(height: 8),
-                Text(
-                  trip.risk.summary,
-                  style: AppTypography.bodySm.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                if (trip.risk != null)
+                  Text(
+                    trip.risk!.summary,
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                else
+                  Text(
+                    trip.status == TripStatus.routingUnavailable
+                        ? 'Routing is currently unavailable.'
+                        : 'Weather data is currently unavailable.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: () => context.push('/risk'),
@@ -306,7 +318,7 @@ class _TripAnalysisBody extends StatelessWidget {
           ),
           const SizedBox(height: Spacing.stackSm),
           Text(
-            trip.recommendation.headline,
+            trip.recommendation?.headline ?? (trip.status == TripStatus.routingUnavailable ? 'Routing Unavailable' : 'Recommendation Unavailable'),
             style: AppTypography.bodyMd.copyWith(
               color: AppColors.surfaceContainerHighest,
               fontWeight: FontWeight.w600,
@@ -314,7 +326,7 @@ class _TripAnalysisBody extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            trip.recommendation.body,
+            trip.recommendation?.body ?? 'No recommendation is available at this time.',
             style: AppTypography.bodySm.copyWith(
               color: AppColors.onPrimaryContainer,
             ),

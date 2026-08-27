@@ -244,7 +244,8 @@ class HomeScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const SectionTitle(title: 'Your Commute'),
-              RiskBadge(level: trip.risk.level),
+              if (trip.risk != null)
+              RiskBadge(level: trip.risk!.level),
             ],
           ),
           const SizedBox(height: Spacing.stackMd),
@@ -286,10 +287,11 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
               const Spacer(),
+              if (trip.risk != null)
               RiskScoreIndicator(
-                score: trip.risk.overallScore,
-                level: trip.risk.level,
-                size: 72,
+                score: trip.risk!.overallScore,
+                level: trip.risk!.level,
+                size: 70,
               ),
             ],
           ),
@@ -308,9 +310,13 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    trip.recommendation.headline,
-                    style: AppTypography.bodySm.copyWith(
-                      color: AppColors.primaryText,
+                    trip.recommendation?.headline ?? 
+                        (trip.status == TripStatus.routingUnavailable 
+                            ? 'Routing Unavailable' 
+                            : 'Weather Data Unavailable'),
+                    style: AppTypography.bodyMd.copyWith(
+                      color: AppColors.surfaceContainerHighest,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -351,11 +357,14 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: Spacing.stackMd),
           Text(
-            trip.risk.summary,
-            style: AppTypography.bodyMd.copyWith(
-              color: AppColors.onSurfaceVariant,
-            ),
+          trip.risk?.summary ?? 
+              (trip.status == TripStatus.routingUnavailable 
+                  ? 'We cannot evaluate the trip due to routing errors.'
+                  : 'We cannot evaluate the trip due to weather data errors.'),
+          style: AppTypography.bodyMd.copyWith(
+            color: AppColors.onSurfaceVariant,
           ),
+        ),
           const SizedBox(height: Spacing.stackMd),
           // Data sources
           Wrap(
