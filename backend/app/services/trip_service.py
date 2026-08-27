@@ -35,6 +35,27 @@ class TripService:
         # Default to Noida Sector 62
         return 28.6270, 77.3650
 
+    def _evaluate_alert_policy(self, alerts: List['NormalizedAlert']) -> List['NormalizedAlert']:
+        """
+        Evaluates the source class of each alert against WeatherGPT's override policy.
+        - authoritative: eligible
+        - secondary: not eligible (contributes to risk only)
+        - demo: eligible ONLY if demo_mode is enabled
+        """
+        from app.core.config import settings
+        from app.models.enums import AlertSourceClass
+        
+        for alert in alerts:
+            if alert.source_class == AlertSourceClass.authoritative:
+                alert.is_override_eligible = True
+            elif alert.source_class == AlertSourceClass.secondary:
+                alert.is_override_eligible = False
+            elif alert.source_class == AlertSourceClass.demo:
+                alert.is_override_eligible = settings.demo_mode
+            else:
+                alert.is_override_eligible = False
+        return alerts
+
     async def analyze_trip(self, request: TripRequest) -> TripResponse:
         origin_lat, origin_lng = self._mock_geocode(request.origin)
         dest_lat, dest_lng = self._mock_geocode(request.destination)
@@ -45,7 +66,10 @@ class TripService:
             routing_provider_name = f"{routing_provider_name} (Demo Transit)"
             
         weather = await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
-        alerts = await self.alert_provider.get_active_alerts(origin_lat, origin_lng)
+        
+        # Fetch and evaluate alerts against WeatherGPT override policy
+        raw_alerts = await self.alert_provider.get_active_alerts(origin_lat, origin_lng)
+        alerts = self._evaluate_alert_policy(raw_alerts)
         
         analysis_id = str(uuid.uuid4())
         
@@ -119,6 +143,7 @@ class TripService:
             sources=[
                 DataSource(name=self.weather_provider.provider_name, type="Weather", last_updated=datetime.now(timezone.utc)),
                 DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
+                DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
             ],
             estimated_duration=result.total_duration,
             distance_km=result.total_distance_km

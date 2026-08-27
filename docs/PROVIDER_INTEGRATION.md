@@ -12,15 +12,15 @@ The single source of truth for the Decision Engine is `backend/app/decision_engi
 
 ## Source Priority
 In the event of conflicting information or overlapping features, the system honors the following strict priority order:
-1. **Authoritative Emergency/Official Alerts** (e.g., NDMA/IMD Red Alerts).
+1. **Authoritative Emergency/Official Alerts** (`UNAVAILABLE` for direct integration, `PLANNED` via secondary, `DEMO` via mock).
 2. **Authoritative Official Forecast/Warning Data** where available.
-3. **Primary Weather/Routing/Traffic Providers** (e.g., Open-Meteo, Google Maps).
+3. **Primary Weather/Routing/Traffic Providers** (`VERIFIED` Open-Meteo & Google Routes, `UNAVAILABLE` Traffic).
 4. **Derived WeatherGPT Calculations** (e.g., deterministic risk score aggregations).
-5. **LLM-generated explanation** (The LLM explains the decision, but never makes or overrides the deterministic risk calculation).
+5. **LLM-generated explanation** (`UNAVAILABLE` currently; The LLM explains the decision, but never makes or overrides the deterministic risk calculation).
 
 ## Live Providers Implementation
 
-### Weather: Open-Meteo
+### Weather: Open-Meteo [VERIFIED]
 - **Status**: Implemented
 - **Data Extracted**: `temperature_2m`, `precipitation`, `relative_humidity_2m`, `wind_speed_10m`, `wind_gusts_10m`, `visibility`, `weather_code`.
 - **Visibility**: Uses explicit hourly physical visibility measurements from the API. We do not infer visibility solely from weather codes.

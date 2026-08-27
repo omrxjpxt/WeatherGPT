@@ -25,6 +25,18 @@ Returns service status, version, and environment.
 ### 5. Alerts
 `GET /alerts/`
 
+**Model: `NormalizedAlert`**
+- `id`: str
+- `sourceName`: str
+- `sourceClass`: `authoritative` | `secondary` | `demo`
+- `severity`: str
+- `affectedAreasPolygon`: List[List[float]]
+- `issuedAt`: datetime
+- `expiresAt`: Optional[datetime]
+- `action`: Optional[str]
+- `sourceUrl`: Optional[str]
+- `isOverrideEligible`: bool (Determined by WeatherGPT internal policy, not the upstream provider)
+
 ### 6. Assistant
 `POST /assistant/parse`
 **Request:** `AssistantParseRequest` (query: str)

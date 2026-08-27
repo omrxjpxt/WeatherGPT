@@ -46,3 +46,8 @@ class RouteStatus(str, Enum):
     cached = "cached"
     mock = "mock"
     unavailable = "unavailable"
+
+class AlertSourceClass(str, Enum):
+    authoritative = "authoritative"
+    secondary = "secondary"
+    demo = "demo"

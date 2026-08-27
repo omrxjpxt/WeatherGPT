@@ -21,7 +21,7 @@ def check_alert_override(
     
     for alert in alerts:
         # 1. Check severity/actionability criteria
-        if alert.severity not in [AlertSeverity.warning, AlertSeverity.emergency] or not alert.requires_override:
+        if alert.severity not in [AlertSeverity.warning, AlertSeverity.emergency] or not alert.is_override_eligible:
             continue
             
         # 2. Temporal match (validity overlaps travel window)

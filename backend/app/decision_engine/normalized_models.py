@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.models.enums import TransportMode, HazardType, AlertSeverity
+from app.models.enums import TransportMode, HazardType, AlertSeverity, AlertSourceClass
 
 class NormalizedWeatherPoint(BaseModel):
     time: datetime
@@ -40,11 +40,15 @@ class NormalizedHazard(BaseModel):
 
 class NormalizedAlert(BaseModel):
     id: str
+    source_name: str
+    source_class: AlertSourceClass
     severity: AlertSeverity
     affected_areas_polygon: List[List[float]] # Mock simple representation of area
     issued_at: datetime
     expires_at: Optional[datetime]
-    requires_override: bool
+    action: Optional[str] = None
+    source_url: Optional[str] = None
+    is_override_eligible: bool = False
 
 class TripContext(BaseModel):
     origin: str

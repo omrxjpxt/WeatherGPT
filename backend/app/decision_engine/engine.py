@@ -153,8 +153,8 @@ class DecisionEngine:
 
         # 6. Recommendation Logic
         if alert_override_applied:
-            rec_head = f"Official {override_alert.severity.value.capitalize()} Alert active"
-            rec_body = "An official alert covers your route during travel time. Reconsider travel."
+            rec_head = f"{override_alert.source_name} {override_alert.severity.value.capitalize()} Alert active"
+            rec_body = override_alert.action if override_alert.action else "An official alert covers your route during travel time. Reconsider travel."
             suggested_mode = None
             suggested_time = None
         elif overall_score >= 70:

@@ -25,9 +25,13 @@
   - Implemented hybrid risk aggregation (Bottleneck + Exposure) with severity guardrails.
   - Implemented arrival-feasibility-aware alternative departure search.
   - Adopted strictly qualitative `confidence` metric.
-- **Providers**: Created provider interfaces. Implemented live **Open-Meteo WeatherProvider** (with fallback to Mock). Routing, Traffic, and Alerts remain Mock implementations.
+- **Providers**: 
+  - **VERIFIED**: Google Routes API (Integration), Open-Meteo WeatherProvider.
+  - **DEMO**: MockAlertProvider (with application-level override policy and provenance).
+  - **PLANNED**: Secondary Commercial Alert Provider (WeatherAPI).
+  - **UNAVAILABLE**: Traffic, LLM, live direct IMD CAP feed.
 - **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
-- **Testing**: Exhaustive unit tests (15 total, all passing) covering engine determinism, spatial matching, deadlines, scenario ranking, and exposure vs bottleneck aggregation.
+- **Testing**: Exhaustive unit tests (35 total, all passing) covering engine determinism, spatial matching, routing, and alert override policy logic.
 
 ## Currently Pending
 - Simulator execution validation (waiting for iOS build).

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     firestore_project_id: Optional[str] = None
 
     # We want to load from .env file if available
+    # Feature Flags
+    demo_mode: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

@@ -6,7 +6,7 @@ from app.decision_engine.normalized_models import (
     TripContext, NormalizedRoute, NormalizedRouteSegment,
     NormalizedWeatherPoint, NormalizedHazard, NormalizedAlert
 )
-from app.models.enums import TransportMode, AlertSeverity, RiskLevel, ConfidenceLevel, HazardType
+from app.models.enums import TransportMode, AlertSeverity, RiskLevel, ConfidenceLevel, HazardType, AlertSourceClass
 
 @pytest.fixture
 def base_route():
@@ -137,18 +137,18 @@ def test_multiple_alerts_strongest_wins(base_route, clear_weather):
     now = clear_weather[2].time
     
     alert1 = NormalizedAlert(
-        id="a1", severity=AlertSeverity.warning,
+        id="a1", source_name="P1", source_class=AlertSourceClass.authoritative, severity=AlertSeverity.warning,
         affected_areas_polygon=[[28.4, 77.0], [28.7, 77.0], [28.7, 77.5], [28.4, 77.5]],
         issued_at=now - timedelta(hours=1),
         expires_at=now + timedelta(hours=5),
-        requires_override=True
+        is_override_eligible=True
     )
     alert2 = NormalizedAlert(
-        id="a2", severity=AlertSeverity.emergency, # Stronger
+        id="a2", source_name="P2", source_class=AlertSourceClass.authoritative, severity=AlertSeverity.emergency, # Stronger
         affected_areas_polygon=[[28.4, 77.0], [28.7, 77.0], [28.7, 77.5], [28.4, 77.5]],
         issued_at=now - timedelta(hours=2),
         expires_at=now + timedelta(hours=5),
-        requires_override=True
+        is_override_eligible=True
     )
     
     ctx = TripContext(
@@ -165,11 +165,11 @@ def test_alert_no_geometry_regional_match(base_route, clear_weather):
     now = clear_weather[2].time
     
     alert = NormalizedAlert(
-        id="a1", severity=AlertSeverity.warning,
+        id="a1", source_name="P1", source_class=AlertSourceClass.authoritative, severity=AlertSeverity.warning,
         affected_areas_polygon=[], # Missing geometry
         issued_at=now - timedelta(hours=1),
         expires_at=now + timedelta(hours=5),
-        requires_override=True
+        is_override_eligible=True
     )
     
     ctx = TripContext(
