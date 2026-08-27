@@ -9,6 +9,7 @@
 | **Open-Meteo** | Weather | Primary | ✅ Complete `[VERIFIED]` | Offline normalization active. |
 | **WeatherAPI** | Weather/Alerts | Secondary | ✅ Complete `[VERIFIED]` | Strict `[SECONDARY]` fallback and comparison logic implemented. |
 | **Mock Alerts** | Alerts | Demo | ✅ Complete `[DEMO]` | Obeys `demo_mode` override eligibility. |
+| **Curated Hazards** | Hazards | Govt/Demo | ✅ Complete `[VERIFIED]` | Historical susceptibility activated by live weather. |
 | **IMD Direct API** | Alerts | Authoritative | ❌ `[UNAVAILABLE]` | Direct integration blocked by IP whitelisting constraints. |
 | **Google Maps** | Routing | Secondary | ✅ Complete `[VERIFIED]` | Offline routes implementation complete. |
 | **Mapbox** | Routing | Secondary | ❌ Discarded | Discarded in favor of Google Maps integration. |

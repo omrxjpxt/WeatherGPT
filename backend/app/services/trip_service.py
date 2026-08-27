@@ -19,12 +19,14 @@ class TripService:
         alert_provider: AlertProvider,
         secondary_weather_provider: Optional[WeatherProvider] = None,
         secondary_alert_provider: Optional[AlertProvider] = None,
+        hazard_repository: Optional['app.repositories.hazard_repository.HazardRepository'] = None,
     ):
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
         self.alert_provider = alert_provider
         self.secondary_weather_provider = secondary_weather_provider
         self.secondary_alert_provider = secondary_alert_provider
+        self.hazard_repository = hazard_repository
         
         self.engine = DecisionEngine()
         self._metro_provider = MockRoutingProvider()
@@ -185,8 +187,24 @@ class TripService:
                 distance_km=0.0
             )
             
-        hazards: List[NormalizedHazard] = [] # Mock empty hazards for now
-        
+        hazards = []
+        if self.hazard_repository:
+            try:
+                # Calculate rough bounding box from route segments
+                min_lat = min(min(seg.start_lat, seg.end_lat) for seg in route.segments)
+                max_lat = max(max(seg.start_lat, seg.end_lat) for seg in route.segments)
+                min_lng = min(min(seg.start_lng, seg.end_lng) for seg in route.segments)
+                max_lng = max(max(seg.start_lng, seg.end_lng) for seg in route.segments)
+                
+                # Expand bounding box slightly to catch nearby hazards (approx 0.05 degrees)
+                hazards = await self.hazard_repository.get_hazards_in_region(
+                    min_lat - 0.05, min_lng - 0.05,
+                    max_lat + 0.05, max_lng + 0.05
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Hazard repository failed: {e}")
+                hazards = []
         # 2. Build Context
         ctx = TripContext(
             origin=request.origin,
@@ -230,7 +248,7 @@ class TripService:
                 suggested_departure_time=result.suggested_time,
             ),
             mode_options=mode_options,
-            hazards=[],
+            hazards=result.hazards,
             sources=sources,
             estimated_duration=result.total_duration,
             distance_km=result.total_distance_km

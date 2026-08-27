@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     precipitation_diff_threshold_mm: float = 5.0
     wind_diff_threshold_kmh: float = 15.0
     visibility_diff_threshold_m: float = 2000.0
+    
+    # Hazard Influence Factor (Engineering Assumption)
+    hazard_influence_factor: float = 0.5
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -6,7 +6,7 @@ from app.decision_engine.normalized_models import (
     TripContext, NormalizedRoute, NormalizedRouteSegment,
     NormalizedWeatherPoint, NormalizedHazard, NormalizedAlert
 )
-from app.models.enums import TransportMode, AlertSeverity, RiskLevel, ConfidenceLevel, HazardType, AlertSourceClass
+from app.models.enums import TransportMode, AlertSeverity, RiskLevel, ConfidenceLevel, HazardType, AlertSourceClass, HazardSourceClass
 
 @pytest.fixture
 def base_route():
@@ -106,7 +106,8 @@ def test_hazard_outside_radius(base_route, clear_weather):
     # Route is approx 28.6, 77.3 to 28.5, 77.2
     # Place hazard far away (e.g. 30.0, 77.3)
     hazard = NormalizedHazard(
-        id="h1", type=HazardType.waterlogging, lat=30.0, lng=77.3, severity_score=80
+        id="h1", type=HazardType.waterlogging, lat=30.0, lng=77.3, 
+        radius_meters=1000.0, base_severity=80, source_name="Test Source", source_class=HazardSourceClass.demo
     )
     ctx = TripContext(
         origin="A", destination="B", departure_time=clear_weather[2].time,
@@ -121,7 +122,8 @@ def test_hazard_inside_radius(base_route, clear_weather):
     engine = DecisionEngine()
     # Place hazard exactly on start point
     hazard = NormalizedHazard(
-        id="h1", type=HazardType.waterlogging, lat=28.6, lng=77.3, severity_score=80
+        id="h1", type=HazardType.waterlogging, lat=28.6, lng=77.3, 
+        radius_meters=1000.0, base_severity=100, source_name="Test Source", source_class=HazardSourceClass.demo, trigger_condition="Clear"
     )
     ctx = TripContext(
         origin="A", destination="B", departure_time=clear_weather[2].time,
@@ -129,7 +131,7 @@ def test_hazard_inside_radius(base_route, clear_weather):
         hazards=[hazard], alerts=[]
     )
     res = engine.evaluate(ctx)
-    # Should be affected by hazard
+    # Should be affected by hazard (score 50 * 1.5 mode multiplier -> approx 30)
     assert res.overall_risk.level != RiskLevel.low
 
 def test_multiple_alerts_strongest_wins(base_route, clear_weather):
@@ -195,7 +197,8 @@ def test_exposure_vs_bottleneck_aggregation(heavy_rain_weather):
     
     engine = DecisionEngine()
     hazard = NormalizedHazard(
-        id="h1", type=HazardType.waterlogging, lat=28.6, lng=77.3, severity_score=100
+        id="h1", type=HazardType.waterlogging, lat=28.6, lng=77.3,
+        radius_meters=1000.0, base_severity=100, source_name="Test Source", source_class=HazardSourceClass.demo, trigger_condition="Heavy Rain"
     )
     
     # We want the first 15 mins to be severe (using heavy_rain_weather)

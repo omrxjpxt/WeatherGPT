@@ -20,12 +20,14 @@ def _calculate_precipitation_score(weather: NormalizedWeatherPoint) -> int:
     """
     return min(100, int(weather.precipitation_mm * 3.0))
 
+from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard, HazardRelevanceResult
+
 def calculate_segment_risk(
     segment: NormalizedRouteSegment,
     weather: NormalizedWeatherPoint,
     hazards: List[NormalizedHazard],
     mode: TransportMode
-) -> Tuple[int, RiskLevel, List[RiskFactor], str]:
+) -> Tuple[int, RiskLevel, List[RiskFactor], str, List[HazardRelevanceResult]]:
     """
     Calculates risk for a specific segment.
     Explicitly separates:
@@ -69,21 +71,55 @@ def calculate_segment_risk(
         
     # 4. Route Exposure (Hazards intersecting this segment)
     segment_hazards_score = 0
+    relevance_results = []
+    
     for h in hazards:
+        # Spatial match using existing Haversine point-to-segment distance
         dist_km = point_to_segment_distance_km(
             h.lat, h.lng,
             segment.start_lat, segment.start_lng,
             segment.end_lat, segment.end_lng
         )
-        if dist_km <= HAZARD_PROXIMITY_RADIUS_KM:
-            segment_hazards_score = max(segment_hazards_score, h.severity_score)
-            factors.append(RiskFactor(
-                name="Local Hazard",
-                description=f"Route near hazard: {h.type.value} ({dist_km:.1f}km away)",
-                score=h.severity_score,
-                level=_score_to_level(h.severity_score),
-                weight=0.3
-            ))
+        
+        spatially_relevant = dist_km <= (h.radius_meters / 1000.0)
+        weather_triggered = False
+        currently_relevant = False
+        hazard_contribution = 0
+        relevance_reason = None
+        
+        if spatially_relevant:
+            # Weather trigger
+            if h.trigger_precipitation_mm is not None and weather.precipitation_mm >= h.trigger_precipitation_mm:
+                weather_triggered = True
+            elif h.trigger_condition is not None and h.trigger_condition.lower() in weather.condition.lower():
+                weather_triggered = True
+                
+            if weather_triggered:
+                # Temporal overlap is implicitly true because we're evaluating the weather AT the passage time
+                currently_relevant = True
+                from app.core.config import settings
+                hazard_contribution = int(h.base_severity * settings.hazard_influence_factor)
+                segment_hazards_score = max(segment_hazards_score, hazard_contribution)
+                relevance_reason = f"Route near active {h.type.value} hotspot ({h.source_name}). Triggered by {weather.condition}."
+                factors.append(RiskFactor(
+                    name="Historical Hazard Risk",
+                    description=relevance_reason,
+                    score=hazard_contribution,
+                    level=_score_to_level(hazard_contribution),
+                    weight=0.3
+                ))
+            else:
+                relevance_reason = "Near route, but weather triggers not met."
+        
+        relevance_results.append(HazardRelevanceResult(
+            hazard_id=h.id,
+            spatially_relevant=spatially_relevant,
+            weather_triggered=weather_triggered,
+            temporally_relevant=currently_relevant, # Temporal implies current passage overlap
+            currently_relevant=currently_relevant,
+            relevance_reason=relevance_reason,
+            contribution_score=hazard_contribution
+        ))
 
     # Combine
     base_environmental_risk = (precip_score * 0.4) + (60 if weather.is_poor_visibility else 0) * 0.2 + (segment_hazards_score * 0.3)
@@ -95,7 +131,7 @@ def calculate_segment_risk(
     level = _score_to_level(final_score)
     reason = "Safe" if level == RiskLevel.low else "Elevated risk due to environmental factors."
     
-    return final_score, level, factors, reason
+    return final_score, level, factors, reason, relevance_results
 
 def _score_to_level(score: int) -> RiskLevel:
     if score >= 75: return RiskLevel.severe

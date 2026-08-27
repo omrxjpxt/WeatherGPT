@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.models.enums import TransportMode, HazardType, AlertSeverity, AlertSourceClass
+from app.models.enums import TransportMode, HazardType, HazardSourceClass, AlertSeverity, AlertSourceClass
 
 class NormalizedWeatherPoint(BaseModel):
     time: datetime
@@ -36,7 +36,30 @@ class NormalizedHazard(BaseModel):
     type: HazardType
     lat: float
     lng: float
-    severity_score: int # 0-100
+    radius_meters: float
+    base_severity: int # 0-100 historical susceptibility
+    source_name: str
+    source_class: HazardSourceClass
+    source_url: Optional[str] = None
+    source_reference: Optional[str] = None
+    reported_timestamp: Optional[datetime] = None
+    
+    # Optional weather triggers
+    trigger_precipitation_mm: Optional[float] = None
+    trigger_condition: Optional[str] = None
+
+class HazardRelevanceResult(BaseModel):
+    hazard_id: str
+    spatially_relevant: bool = False
+    weather_triggered: bool = False
+    temporally_relevant: bool = False
+    currently_relevant: bool = False
+    relevance_reason: Optional[str] = None
+    contribution_score: float = 0.0
+
+class TripHazard(BaseModel):
+    hazard: NormalizedHazard
+    relevance: HazardRelevanceResult
 
 class NormalizedAlert(BaseModel):
     id: str

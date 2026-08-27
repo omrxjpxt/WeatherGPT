@@ -50,7 +50,23 @@ The engine maps the user's route segments to a weather timeline based on estimat
 ## Uncertainty Terminology
 Uncertainty is a qualitative data/recommendation quality assessment rather than a statistically calibrated probability. The engine exposes `high`, `medium`, or `low` confidence based on data source freshness, forecast horizon, and source corroboration.
 
-## Precipitation & Visibility Scoring
+## 6. Local Hazard Intelligence
+The engine calculates relevance for curated historical hazards. A hazard is only relevant if it matches temporally, spatially, and is triggered by the weather.
+
+### Relevance Logic:
+1. **Spatial Proximity:** The minimum distance from the hazard point to the route segment must be `<= radius_meters / 1000.0` km.
+2. **Weather Trigger:** The expected weather at the segment's passage time must meet `trigger_precipitation_mm` OR `trigger_condition`.
+3. **Temporal Match:** Implicitly met because the weather condition used for the trigger is taken at the aligned passage time.
+
+### Hazard Contribution:
+Active hazards contribute to the segment risk using the formula:
+`contribution = base_severity * hazard_influence_factor`
+
+Where `hazard_influence_factor` is a configurable engineering assumption (default 0.5) designed to scale historical susceptibility into a current trip penalty.
+
+---
+
+## 7. Configuration & Tuningsibility Scoring
 
 > **Engineering Assumption:** Open-Meteo returns hourly accumulation in `mm`. We use `precipitation_mm` as a proxy for intensity, scoring risk as a linear scalar `3.0 * precipitation_mm`, capped at 100. This is isolated and ready to be replaced with a scientifically supported threshold-based intensity model in the future.
 

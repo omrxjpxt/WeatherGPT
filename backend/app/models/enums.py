@@ -14,11 +14,15 @@ class RiskLevel(str, Enum):
 
 class HazardType(str, Enum):
     waterlogging = "waterlogging"
-    fog = "fog"
-    heavyRain = "heavyRain"
-    storm = "storm"
-    heatwave = "heatwave"
-    construction = "construction"
+    visibility = "visibility"
+    wind = "wind"
+    heat = "heat"
+
+class HazardSourceClass(str, Enum):
+    authoritative = "authoritative"
+    government_open_data = "government_open_data"
+    secondary = "secondary"
+    demo = "demo"
 
 class AlertSeverity(str, Enum):
     advisory = "advisory"

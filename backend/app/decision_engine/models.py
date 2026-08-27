@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from app.models.enums import RiskLevel, TransportMode
 from app.models.risk import RiskAssessment
 from app.models.route import RouteSegment
-from app.decision_engine.normalized_models import NormalizedHazard, NormalizedAlert
+from app.decision_engine.normalized_models import NormalizedHazard, NormalizedAlert, TripHazard
 
 class SegmentRisk(BaseModel):
     segment_index: int
@@ -24,5 +24,6 @@ class EngineDecisionResult(BaseModel):
     suggested_time: Optional[datetime] = None
     alert_override_applied: bool = False
     active_override_alert: Optional[NormalizedAlert] = None
+    hazards: List[TripHazard] = []
     total_duration: timedelta
     total_distance_km: float

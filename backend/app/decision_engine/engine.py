@@ -70,10 +70,11 @@ class DecisionEngine:
         segment_risks = []
         route_segments_with_weather = []
         all_factors_dict = {}
+        hazard_relevance_dict = {}
         max_risk_score = 0
         
         for idx, (seg, arrival_time, weather) in enumerate(aligned):
-            score, level, factors, reason = calculate_segment_risk(
+            score, level, factors, reason, relevance_results = calculate_segment_risk(
                 segment=seg,
                 weather=weather,
                 hazards=ctx.hazards,
@@ -111,6 +112,11 @@ class DecisionEngine:
             for f in factors:
                 if f.name not in all_factors_dict or all_factors_dict[f.name].score < f.score:
                     all_factors_dict[f.name] = f
+                    
+            for hr in relevance_results:
+                existing = hazard_relevance_dict.get(hr.hazard_id)
+                if not existing or hr.contribution_score > existing.contribution_score:
+                    hazard_relevance_dict[hr.hazard_id] = hr
                     
         # 3. Overall Risk aggregation
         bottleneck_score = max_risk_score
@@ -173,6 +179,15 @@ class DecisionEngine:
             suggested_mode = None
             suggested_time = None
             
+        from app.decision_engine.normalized_models import TripHazard, HazardRelevanceResult
+        
+        trip_hazards = []
+        for h in ctx.hazards:
+            hr = hazard_relevance_dict.get(h.id)
+            if not hr:
+                hr = HazardRelevanceResult(hazard_id=h.id) # Default not relevant
+            trip_hazards.append(TripHazard(hazard=h, relevance=hr))
+            
         return EngineDecisionResult(
             overall_risk=RiskAssessment(
                 overall_score=overall_score,
@@ -189,6 +204,7 @@ class DecisionEngine:
             suggested_time=suggested_time,
             alert_override_applied=alert_override_applied,
             active_override_alert=override_alert,
+            hazards=trip_hazards,
             total_duration=ctx.route.total_duration,
             total_distance_km=ctx.route.total_distance_km
         )

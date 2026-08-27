@@ -35,9 +35,30 @@ Returns service status, version, and environment.
 - `expiresAt`: Optional[datetime]
 - `action`: Optional[str]
 - `sourceUrl`: Optional[str]
-- `isOverrideEligible`: bool (Determined by WeatherGPT internal policy, not the upstream provider)
+- `isOverrideEligible`: bool
 
-### 6. Assistant
+### 6. Hazards
+`GET /hazards/`
+
+**Model: `TripHazard`**
+- `hazard`: `NormalizedHazard`
+  - `id`: str
+  - `type`: `waterlogging` | `visibility` | `wind` | `heat`
+  - `lat`, `lng`: float
+  - `radiusMeters`: float
+  - `baseSeverity`: int
+  - `sourceName`: str
+  - `sourceClass`: `authoritative` | `government_open_data` | `secondary` | `demo`
+  - `triggerPrecipitationMm`: Optional[float]
+  - `triggerCondition`: Optional[str]
+- `relevance`: `HazardRelevanceResult`
+  - `spatiallyRelevant`: bool
+  - `weatherTriggered`: bool
+  - `temporallyRelevant`: bool
+  - `currentlyRelevant`: bool
+  - `contributionScore`: float
+
+### 7. Assistant
 `POST /assistant/parse`
 **Request:** `AssistantParseRequest` (query: str)
 **Response:** `AssistantParseResponse` (intent, is_complete, missing_fields, clarification_prompt)
