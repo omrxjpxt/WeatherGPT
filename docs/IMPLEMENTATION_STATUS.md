@@ -1,6 +1,21 @@
 # WeatherGPT Implementation Status
 
 > **Notice:** For the complete, authoritative overview of the project, including SIH alignment, architecture, and core features, refer to the [Master Project Document](../WEATHERGPT_MASTER.md) in the project root.
+
+## 3. Providers & Data Layers
+
+| Provider | Type | Source Class | Implementation Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Open-Meteo** | Weather | Primary | ✅ Complete `[VERIFIED]` | Offline normalization active. |
+| **WeatherAPI** | Weather/Alerts | Secondary | ✅ Complete `[VERIFIED]` | Strict `[SECONDARY]` fallback and comparison logic implemented. |
+| **Mock Alerts** | Alerts | Demo | ✅ Complete `[DEMO]` | Obeys `demo_mode` override eligibility. |
+| **IMD Direct API** | Alerts | Authoritative | ❌ `[UNAVAILABLE]` | Direct integration blocked by IP whitelisting constraints. |
+| **Google Maps** | Routing | Secondary | ✅ Complete `[VERIFIED]` | Offline routes implementation complete. |
+| **Mapbox** | Routing | Secondary | ❌ Discarded | Discarded in favor of Google Maps integration. |
+| **Mock Routing** | Routing | Demo | ✅ Complete `[DEMO]` | Used for fallback/demo transit paths. |
+| **TomTom/Google** | Traffic | Primary | ⏳ Pending | Awaiting API Key/finalization. |
+| **Gemini/Grok** | LLM | Context | ⏳ Pending | Not yet connected. |
+
 ## Phase 1–5: Complete
 - **Phase 1 (Foundation):** Set up Flutter project, disabled code gen.
 - **Phase 2 (Design System):** Created color and typography tokens, layout tokens, and reusable cards/badges matching Stitch. Bundled Plus Jakarta Sans and Work Sans.

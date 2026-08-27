@@ -60,3 +60,4 @@ class TripContext(BaseModel):
     hazards: List[NormalizedHazard]
     alerts: List[NormalizedAlert]
     arrival_deadline: Optional[datetime] = None
+    agreement_status: str = "high"

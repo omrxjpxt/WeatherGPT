@@ -20,6 +20,12 @@ In the event of conflicting information or overlapping features, the system hono
 
 ## Live Providers Implementation
 
+### Weather & Alerts: WeatherAPI [VERIFIED]
+- **Status**: Implemented (`SECONDARY`)
+- **Data Extracted**: Temperature, precipitation, humidity, wind, visibility, weather condition, active alerts.
+- **Role**: Serves strictly as a secondary comparison source. If primary data (Open-Meteo) differs significantly (e.g. Temp diff > 5C), the confidence of the risk assessment is lowered.
+- **Alerts**: Alerts are normalized but explicitly marked as `secondary`. They will **never** trigger the authoritative emergency override path.
+
 ### Weather: Open-Meteo [VERIFIED]
 - **Status**: Implemented
 - **Data Extracted**: `temperature_2m`, `precipitation`, `relative_humidity_2m`, `wind_speed_10m`, `wind_gusts_10m`, `visibility`, `weather_code`.

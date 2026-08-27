@@ -13,8 +13,9 @@ class Settings(BaseSettings):
     routing_provider: str = "google" # "google" or "mock"
     weather_api_key: Optional[str] = None
     traffic_api_key: Optional[str] = None
-    llm_api_key: Optional[str] = None
+    llm_api_key: Optional[str] = None    # Provider Credentials
     google_maps_api_key: Optional[str] = None
+    weatherapi_api_key: Optional[str] = None
 
     # Firestore
     firestore_project_id: Optional[str] = None
@@ -22,6 +23,12 @@ class Settings(BaseSettings):
     # We want to load from .env file if available
     # Feature Flags
     demo_mode: bool = False
+
+    # Source Comparison Thresholds
+    temperature_diff_threshold_c: float = 5.0
+    precipitation_diff_threshold_mm: float = 5.0
+    wind_diff_threshold_kmh: float = 15.0
+    visibility_diff_threshold_m: float = 2000.0
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

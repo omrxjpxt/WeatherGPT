@@ -63,3 +63,6 @@ We should implement `WeatherApiAlertProvider` extending the `AlertProvider` inte
 
 ### Reasons NOT to integrate
 The primary drawback is the lack of explicit geometry (polygons). Without polygons, we cannot demonstrate the precise geographic intersection logic (e.g., "The route grazes the edge of the alert polygon"). However, given the lack of alternatives for an SIH timeline, it remains the best option.
+
+---
+**Implementation Status:** ✅ Integrated. WeatherAPI is actively used as a secondary provider. The Comparison layer evaluates it against Open-Meteo, using Semantic condition mapping and Configured thresholds (Temp, Precip, Wind) to output `AgreementStatus` for `calculate_confidence`. WeatherAPI alerts are explicitly locked to `AlertSourceClass.secondary` to prevent overriding emergency policies.

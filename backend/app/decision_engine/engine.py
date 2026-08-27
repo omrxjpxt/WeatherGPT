@@ -131,7 +131,7 @@ class DecisionEngine:
         overall_level = _score_to_level(overall_score)
         
         # 4. Uncertainty / Confidence
-        confidence = calculate_confidence(ctx.departure_time, data_sources_count=3)
+        confidence = calculate_confidence(ctx.departure_time, agreement_status=ctx.agreement_status)
         
         # 5. Alert Override
         end_time = ctx.departure_time + ctx.route.total_duration

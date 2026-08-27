@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 import uuid
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from app.models.trip import TripRequest, TripResponse, ModeOption, Recommendation, DataSource
 from app.models.enums import TransportMode
@@ -17,10 +17,15 @@ class TripService:
         weather_provider: WeatherProvider,
         routing_provider: RoutingProvider,
         alert_provider: AlertProvider,
+        secondary_weather_provider: Optional[WeatherProvider] = None,
+        secondary_alert_provider: Optional[AlertProvider] = None,
     ):
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
         self.alert_provider = alert_provider
+        self.secondary_weather_provider = secondary_weather_provider
+        self.secondary_alert_provider = secondary_alert_provider
+        
         self.engine = DecisionEngine()
         self._metro_provider = MockRoutingProvider()
 
@@ -65,10 +70,83 @@ class TripService:
         if request.mode == TransportMode.metro:
             routing_provider_name = f"{routing_provider_name} (Demo Transit)"
             
-        weather = await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
+        import asyncio
+        from app.decision_engine.source_comparison import compare_weather_sources
         
+        # We wrap in exceptions to ensure isolated failure
+        async def fetch_primary_weather():
+            try:
+                return await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Primary weather failed: {e}")
+                return None
+                
+        async def fetch_secondary_weather():
+            if not self.secondary_weather_provider:
+                return None
+            try:
+                return await self.secondary_weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Secondary weather failed: {e}")
+                return None
+                
+        async def fetch_alerts():
+            alerts_gathered = []
+            
+            async def _fetch_single(p):
+                if not p: return []
+                try:
+                    return await p.get_active_alerts(origin_lat, origin_lng)
+                except Exception:
+                    return []
+                    
+            res = await asyncio.gather(
+                _fetch_single(self.alert_provider),
+                _fetch_single(self.secondary_alert_provider)
+            )
+            alerts_gathered.extend(res[0])
+            alerts_gathered.extend(res[1])
+            return alerts_gathered
+            
+        weather_p, weather_s, raw_alerts = await asyncio.gather(
+            fetch_primary_weather(),
+            fetch_secondary_weather(),
+            fetch_alerts()
+        )
+        
+        comparison = compare_weather_sources(weather_p, weather_s)
+        
+        # 1.1 If both weather sources are unavailable, fallback gracefully.
+        if not comparison.primary_timeline:
+            from app.models.risk import RiskAssessment, Confidence, RiskFactor
+            from app.models.enums import RiskLevel, ConfidenceLevel
+            return TripResponse(
+                analysis_id=str(uuid.uuid4()),
+                request=request,
+                risk=RiskAssessment(
+                    overall_score=100,
+                    level=RiskLevel.severe,
+                    confidence=Confidence(level=ConfidenceLevel.low, explanation="Weather data unavailable"),
+                    factors=[RiskFactor(name="Weather Error", description="Could not fetch weather data", score=100, level=RiskLevel.severe, weight=1.0)],
+                    summary="Weather Unavailable"
+                ),
+                route=[],
+                recommendation=Recommendation(
+                    headline="Weather Unavailable",
+                    body="Could not fetch weather data from any source.",
+                    suggested_mode=None,
+                    suggested_departure_time=None,
+                ),
+                mode_options=[],
+                hazards=[],
+                sources=[],
+                estimated_duration=timedelta(0),
+                distance_km=0.0
+            )
+            
         # Fetch and evaluate alerts against WeatherGPT override policy
-        raw_alerts = await self.alert_provider.get_active_alerts(origin_lat, origin_lng)
         alerts = self._evaluate_alert_policy(raw_alerts)
         
         analysis_id = str(uuid.uuid4())
@@ -116,9 +194,10 @@ class TripService:
             departure_time=request.departure_time,
             mode=request.mode,
             route=route,
-            weather_timeline=weather,
+            weather_timeline=comparison.primary_timeline,
             hazards=hazards,
-            alerts=alerts
+            alerts=alerts,
+            agreement_status=comparison.agreement_status.value
         )
         
         # 3. Evaluate Engine
@@ -127,6 +206,18 @@ class TripService:
         # 4. Mock alternative modes (in reality, run engine for each mode)
         mode_options = []
         
+        sources = [
+            DataSource(name=self.weather_provider.provider_name, type="Weather (Primary)", last_updated=datetime.now(timezone.utc)),
+            DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
+            DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
+        ]
+        
+        if self.secondary_weather_provider and comparison.secondary_timeline:
+            sources.append(DataSource(name=self.secondary_weather_provider.provider_name, type="Weather (Secondary)", last_updated=datetime.now(timezone.utc)))
+            
+        if self.secondary_alert_provider:
+             sources.append(DataSource(name=self.secondary_alert_provider.provider_name, type=f"Alerts [{self.secondary_alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)))
+             
         return TripResponse(
             analysis_id=analysis_id,
             request=request,
@@ -140,11 +231,7 @@ class TripService:
             ),
             mode_options=mode_options,
             hazards=[],
-            sources=[
-                DataSource(name=self.weather_provider.provider_name, type="Weather", last_updated=datetime.now(timezone.utc)),
-                DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
-                DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
-            ],
+            sources=sources,
             estimated_duration=result.total_duration,
             distance_km=result.total_distance_km
         )
