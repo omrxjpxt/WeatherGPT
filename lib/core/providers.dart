@@ -2,26 +2,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 import '../repositories/mock_repositories.dart';
+import '../repositories/http/http_trip_repository.dart';
+import '../repositories/http/http_weather_repository.dart';
+import '../repositories/http/http_risk_repository.dart';
+import '../repositories/http/http_alert_repository.dart';
+import 'api/api_config.dart';
+import 'api/api_client.dart';
+
+// ── API Client Provider ──
+final apiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient();
+});
 
 // ── Repository Providers ──
 
 final tripRepositoryProvider = Provider<TripRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpTripRepository(ref.read(apiClientProvider));
+  }
   return MockTripRepository();
 });
 
 final weatherRepositoryProvider = Provider<WeatherRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpWeatherRepository(ref.read(apiClientProvider));
+  }
   return MockWeatherRepository();
 });
 
 final riskRepositoryProvider = Provider<RiskRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpRiskRepository(ref.read(apiClientProvider), ref.read(tripRepositoryProvider));
+  }
   return MockRiskRepository();
 });
 
 final alertRepositoryProvider = Provider<AlertRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpAlertRepository(ref.read(apiClientProvider));
+  }
   return MockAlertRepository();
 });
 
 final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
+  // History is always mock for now since there's no backend for it in this MVP
   return MockHistoryRepository();
 });
 
@@ -65,7 +89,7 @@ final scenarioTimeProvider =
 final scenarioResultsProvider = FutureProvider<List<ScenarioResult>>((ref) async {
   final request = ref.watch(activeTripRequestProvider);
   final repo = ref.read(tripRepositoryProvider);
-  final baseTime = DateTime(2026, 8, 27, 6, 0);
+  final baseTime = DateTime.now().add(const Duration(minutes: 15)); // starting point
   final times = List.generate(13, (i) => baseTime.add(Duration(minutes: i * 30)));
   return repo.simulateScenarios(request, times);
 });

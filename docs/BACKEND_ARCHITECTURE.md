@@ -16,6 +16,12 @@ WeatherGPT is built on FastAPI and follows a clean architecture pattern. The app
 ## Data Normalization Layer
 To decouple the deterministic engine from external API quirks, all provider data is mapped to normalized internal models (`app/decision_engine/normalized_models.py`) before evaluation.
 
+## Flutter Client Integration
+The Flutter application strictly consumes the FastAPI endpoints via HTTP repositories.
+- **Provider Provenance**: The UI renders provider names directly from the backend `DataSource` metadata. It does not hardcode provider names.
+- **Partial Degradation**: The client distinguishes between backend failure, network timeout, and specific provider failure (e.g., routing unavailable vs. weather unavailable) using the typed `ApiException`.
+- **Mock/Live Switching**: Controlled securely at the repository layer (`ApiConfig.mode`). All provider keys remain exclusively on the backend.
+
 ## Scenario Traceability
 All trip analysis and scenario results are tagged with a unique `analysis_id` / `scenario_id`. This ID is persisted along with the input context and decision output for auditability and historical replay.
 

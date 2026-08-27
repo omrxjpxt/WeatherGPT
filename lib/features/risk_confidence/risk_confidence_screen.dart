@@ -71,7 +71,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
                       ),
                       child: Center(
                         child: Text(
-                          '${trip.risk.confidence.percentage}%',
+                          trip.risk.confidence.level.name.toUpperCase(),
                           style: AppTypography.labelMd.copyWith(
                             color: AppColors.tertiaryContainer,
                             fontWeight: FontWeight.w700,

@@ -2,6 +2,17 @@
 
 Prefix: `/api/v1`
 
+## Flutter ↔ FastAPI Environment Configuration
+
+The Flutter application dynamically configures the base URL using `ApiConfig` (`lib/core/api/api_config.dart`):
+
+- **Production**: `https://api.weathergpt.com/api/v1`
+- **Local Web**: `http://localhost:8000/api/v1`
+- **Android Emulator**: `http://10.0.2.2:8000/api/v1`
+- **iOS Device / Simulator**: `http://$API_HOST:8000/api/v1` (defaults to 127.0.0.1)
+
+All endpoints accept and return camelCase JSON automatically handled by the backend's `alias_generator=to_camel` and Flutter's `.fromJson` models.
+
 ## Endpoints
 
 ### 1. Health

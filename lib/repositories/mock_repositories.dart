@@ -124,7 +124,6 @@ class MockTripRepository implements TripRepository {
       level: _levelForScore(score),
       confidence: Confidence(
         level: ConfidenceLevel.high,
-        percentage: 87,
         explanation: 'Based on 3 weather models + real-time IMD radar',
       ),
       factors: [

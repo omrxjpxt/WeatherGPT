@@ -47,11 +47,18 @@
   - **PLANNED**: Secondary Commercial Alert Provider (WeatherAPI).
   - **UNAVAILABLE**: Traffic, LLM, live direct IMD CAP feed.
 - **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
-- **Testing**: Exhaustive unit tests (35 total, all passing) covering engine determinism, spatial matching, routing, and alert override policy logic.
+- **Testing**: Exhaustive unit tests (47 total, all passing) covering engine determinism, spatial matching, routing, hazards, and alert override policy logic.
+
+## Phase 12: Flutter ↔ FastAPI Integration
+- **API Client**: Built `ApiClient` with typed `ApiException` handling partial network degradation, routing failure, and validation errors.
+- **Dynamic Config**: `ApiConfig` setup to properly route localhost/10.0.2.2 depending on iOS/Android development target.
+- **HTTP Repositories**: Replaced Mock repositories with HTTP-backed repositories calling FastAPI endpoints for Trips, Weather, Hazards, Alerts, and Scenarios.
+- **Mock/Live Toggle**: Added conditional provider resolution allowing fallback to offline Mock data when backend is down/unavailable.
+- **Data Models**: Successfully bridged Python/Pydantic `camelCase` responses to Dart domain models with `fromJson` serializers. Confirmed Qualitative Confidence UI updates.
 
 ## Currently Pending
-- Simulator execution validation (waiting for iOS build).
-- Switch from mock providers to live integrations (Google Maps, IMD, LLM).
+- Visual layout refinement on iOS simulator (specifically Home screen clipping issues).
+- Connect production APIs upon user approval (TomTom/Traffic, Gemini, Firestore).
 
 ## Next Steps
 - Verify visual fidelity on an iOS simulator.
