@@ -10,9 +10,11 @@ class Settings(BaseSettings):
 
     # External APIs
     weather_provider: str = "open-meteo" # "open-meteo" or "mock"
+    routing_provider: str = "google" # "google" or "mock"
     weather_api_key: Optional[str] = None
     traffic_api_key: Optional[str] = None
     llm_api_key: Optional[str] = None
+    google_maps_api_key: Optional[str] = None
 
     # Firestore
     firestore_project_id: Optional[str] = None

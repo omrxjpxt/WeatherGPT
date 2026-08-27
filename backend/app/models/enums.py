@@ -40,3 +40,9 @@ class RecommendationAction(str, Enum):
     change_mode = "change_mode"
     delay = "delay"
     avoid = "avoid"
+
+class RouteStatus(str, Enum):
+    live = "live"
+    cached = "cached"
+    mock = "mock"
+    unavailable = "unavailable"

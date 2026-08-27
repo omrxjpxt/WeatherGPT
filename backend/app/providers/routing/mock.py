@@ -1,39 +1,48 @@
 import asyncio
 from datetime import timedelta
+from typing import List
 from app.providers.routing.base import RoutingProvider
-from app.models.enums import TransportMode
+from app.models.enums import TransportMode, RouteStatus
 from app.decision_engine.normalized_models import NormalizedRoute, NormalizedRouteSegment
 
 class MockRoutingProvider(RoutingProvider):
-    async def get_route(self, origin: str, destination: str, mode: TransportMode) -> NormalizedRoute:
+    @property
+    def provider_name(self) -> str:
+        return "Mock Routing API"
+        
+    @property
+    def route_status(self) -> RouteStatus:
+        return RouteStatus.mock
+
+    async def get_route(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, mode: TransportMode) -> List[NormalizedRoute]:
         await asyncio.sleep(0.1)
         
         if mode == TransportMode.metro:
-            return NormalizedRoute(
+            return [NormalizedRoute(
                 segments=[
                     NormalizedRouteSegment(
-                        start_lat=28.6270, start_lng=77.3650,
+                        start_lat=origin_lat, start_lng=origin_lng,
                         end_lat=28.5850, end_lng=77.3200,
                         distance_km=5.0,
                         estimated_duration=timedelta(minutes=15)
                     ),
                     NormalizedRouteSegment(
                         start_lat=28.5850, start_lng=77.3200,
-                        end_lat=28.4942, end_lng=77.0860,
+                        end_lat=dest_lat, end_lng=dest_lng,
                         distance_km=37.0,
                         estimated_duration=timedelta(minutes=60)
                     )
                 ],
                 total_distance_km=42.0,
                 total_duration=timedelta(minutes=75)
-            )
+            )]
             
         # Default road route (Bike/Car)
         duration = timedelta(minutes=55) if mode == TransportMode.bike else timedelta(minutes=65)
-        return NormalizedRoute(
+        return [NormalizedRoute(
             segments=[
                 NormalizedRouteSegment(
-                    start_lat=28.6270, start_lng=77.3650,
+                    start_lat=origin_lat, start_lng=origin_lng,
                     end_lat=28.6150, end_lng=77.3400,
                     distance_km=3.5,
                     estimated_duration=timedelta(minutes=8)
@@ -64,11 +73,11 @@ class MockRoutingProvider(RoutingProvider):
                 ),
                 NormalizedRouteSegment(
                     start_lat=28.4950, start_lng=77.0890,
-                    end_lat=28.4942, end_lng=77.0860,
+                    end_lat=dest_lat, end_lng=dest_lng,
                     distance_km=2.0,
                     estimated_duration=timedelta(minutes=2)
                 )
             ],
             total_distance_km=35.5,
             total_duration=duration
-        )
+        )]

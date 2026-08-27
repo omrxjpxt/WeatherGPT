@@ -2,6 +2,8 @@ from app.providers.weather.mock import MockWeatherProvider
 from app.providers.weather.open_meteo import OpenMeteoWeatherProvider
 from app.providers.weather.fallback import FallbackWeatherProvider
 from app.providers.routing.mock import MockRoutingProvider
+from app.providers.routing.google_routes import GoogleRoutesProvider
+from app.providers.routing.fallback import FallbackRoutingProvider
 from app.providers.traffic.mock import MockTrafficProvider
 from app.providers.alerts.mock import MockAlertProvider
 from app.providers.llm.mock import MockLLMProvider
@@ -19,7 +21,13 @@ if settings.weather_provider == "open-meteo":
 else:
     weather_provider = _mock_weather
 
-routing_provider = MockRoutingProvider()
+_mock_routing = MockRoutingProvider()
+if settings.routing_provider == "google":
+    _google_routing = GoogleRoutesProvider()
+    routing_provider = FallbackRoutingProvider(primary=_google_routing)
+else:
+    routing_provider = _mock_routing
+
 traffic_provider = MockTrafficProvider()
 alert_provider = MockAlertProvider()
 llm_provider = MockLLMProvider()
