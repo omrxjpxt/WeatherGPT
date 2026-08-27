@@ -97,11 +97,13 @@ class DecisionEngine:
                 weather=WeatherPoint(
                     time=weather.time,
                     temperature=weather.temperature,
-                    precipitation=weather.precipitation,
+                    precipitation_mm=weather.precipitation_mm,
                     humidity=weather.humidity,
                     wind_speed=weather.wind_speed,
+                    wind_gusts=weather.wind_gusts,
+                    visibility=weather.visibility,
                     condition=weather.condition,
-                    icon="🌧️" if weather.precipitation > 0 else "⛅"
+                    icon="🌧️" if weather.precipitation_mm > 0 else "⛅"
                 )
             ))
             

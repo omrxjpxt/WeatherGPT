@@ -5,9 +5,11 @@ from app.models.base import WeatherBaseModel
 class WeatherPoint(WeatherBaseModel):
     time: datetime
     temperature: float # Celsius
-    precipitation: float # mm/hr
+    precipitation_mm: float # mm accumulation (previous hour)
     humidity: int # percentage
     wind_speed: float # km/h
+    wind_gusts: float # km/h
+    visibility: float # meters
     condition: str
     icon: str
 

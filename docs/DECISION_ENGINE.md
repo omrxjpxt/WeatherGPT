@@ -50,6 +50,8 @@ The engine maps the user's route segments to a weather timeline based on estimat
 ## Uncertainty Terminology
 Uncertainty is a qualitative data/recommendation quality assessment rather than a statistically calibrated probability. The engine exposes `high`, `medium`, or `low` confidence based on data source freshness, forecast horizon, and source corroboration.
 
-## Precipitation Scoring
-> [!NOTE]
-> **Engineering Assumption:** Precipitation risk is currently scored as `3.0 * (mm/hr)`, capped at 100. This is isolated and ready to be replaced with a scientifically supported threshold-based intensity model in the future.
+## Precipitation & Visibility Scoring
+
+> **Engineering Assumption:** Open-Meteo returns hourly accumulation in `mm`. We use `precipitation_mm` as a proxy for intensity, scoring risk as a linear scalar `3.0 * precipitation_mm`, capped at 100. This is isolated and ready to be replaced with a scientifically supported threshold-based intensity model in the future.
+
+> **Visibility:** The engine uses explicit `visibility` (meters) returned by the provider. If `visibility < 1000m`, a moderate risk penalty is applied.

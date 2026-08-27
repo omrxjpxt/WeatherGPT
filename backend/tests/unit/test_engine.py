@@ -29,8 +29,8 @@ def clear_weather():
     for i in range(-2, 5):
         timeline.append(
             NormalizedWeatherPoint(
-                time=now + timedelta(hours=i), temperature=30.0, precipitation=0.0, humidity=50,
-                wind_speed=5.0, condition="Clear", is_extreme_heat=False, is_poor_visibility=False
+                time=now + timedelta(hours=i), temperature=30.0, precipitation_mm=0.0, humidity=50,
+                wind_speed=5.0, wind_gusts=5.0, visibility=10000.0, condition="Clear", is_extreme_heat=False, is_poor_visibility=False
             )
         )
     return timeline
@@ -42,8 +42,8 @@ def heavy_rain_weather():
     for i in range(-2, 5):
         timeline.append(
             NormalizedWeatherPoint(
-                time=now + timedelta(hours=i), temperature=25.0, precipitation=30.0, humidity=95,
-                wind_speed=25.0, condition="Heavy Rain", is_extreme_heat=False, is_poor_visibility=True
+                time=now + timedelta(hours=i), temperature=25.0, precipitation_mm=30.0, humidity=95,
+                wind_speed=25.0, wind_gusts=40.0, visibility=500.0, condition="Heavy Rain", is_extreme_heat=False, is_poor_visibility=True
             )
         )
     return timeline
@@ -203,8 +203,9 @@ def test_exposure_vs_bottleneck_aggregation(heavy_rain_weather):
     mixed_weather = heavy_rain_weather[:]
     # Fast forward a bit so the second segment hits clear weather
     for i in range(3, len(mixed_weather)):
-        mixed_weather[i].precipitation = 0.0
+        mixed_weather[i].precipitation_mm = 0.0
         mixed_weather[i].is_poor_visibility = False
+        mixed_weather[i].visibility = 10000.0
         
     ctx = TripContext(
         origin="A", destination="B", departure_time=mixed_weather[2].time,
@@ -223,9 +224,11 @@ def test_better_departure_time_selected(base_route, clear_weather):
     
     weather = clear_weather[:]
     # Make current time bad
-    weather[2].precipitation = 50.0
+    weather[2].precipitation_mm = 50.0
+    weather[2].visibility = 500.0
     # Make +30 mins good
-    weather[3].precipitation = 0.0
+    weather[3].precipitation_mm = 0.0
+    weather[3].visibility = 10000.0
     
     ctx = TripContext(
         origin="A", destination="B", departure_time=now,
@@ -241,8 +244,10 @@ def test_departure_candidate_violating_deadline(base_route, clear_weather):
     engine = DecisionEngine()
     now = clear_weather[2].time
     weather = clear_weather[:]
-    weather[2].precipitation = 50.0
-    weather[3].precipitation = 0.0
+    weather[2].precipitation_mm = 50.0
+    weather[2].visibility = 500.0
+    weather[3].precipitation_mm = 0.0
+    weather[3].visibility = 10000.0
     
     ctx = TripContext(
         origin="A", destination="B", departure_time=now,
@@ -263,7 +268,7 @@ def test_scenario_risk_filtering_and_ranking(base_route, clear_weather):
         TripContext(origin="A", destination="B", departure_time=now, mode=TransportMode.car, route=base_route, weather_timeline=weather, hazards=[], alerts=[])
     )
     
-    weather[2].precipitation = 100.0
+    weather[2].precipitation_mm = 100.0
     res_unfeasible = engine._evaluate_core(
         TripContext(origin="A", destination="B", departure_time=now, mode=TransportMode.bike, route=base_route, weather_timeline=weather, hazards=[], alerts=[])
     )

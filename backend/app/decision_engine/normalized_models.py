@@ -7,9 +7,11 @@ from app.models.enums import TransportMode, HazardType, AlertSeverity
 class NormalizedWeatherPoint(BaseModel):
     time: datetime
     temperature: float
-    precipitation: float
+    precipitation_mm: float
     humidity: int
     wind_speed: float
+    wind_gusts: float
+    visibility: float # meters
     condition: str
     is_extreme_heat: bool
     is_poor_visibility: bool

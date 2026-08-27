@@ -23,9 +23,8 @@
   - Implemented configurable geographic point-to-line hazard proximity check (Haversine/planar approx).
   - Implemented hybrid risk aggregation (Bottleneck + Exposure) with severity guardrails.
   - Implemented arrival-feasibility-aware alternative departure search.
-  - Refined alert logic (severity ranking, exact polygon raycasting vs regional match).
   - Adopted strictly qualitative `confidence` metric.
-- **Providers**: Created provider interfaces and Mock implementations mimicking Noida->Gurgaon data.
+- **Providers**: Created provider interfaces. Implemented live **Open-Meteo WeatherProvider** (with fallback to Mock). Routing, Traffic, and Alerts remain Mock implementations.
 - **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
 - **Testing**: Exhaustive unit tests (15 total, all passing) covering engine determinism, spatial matching, deadlines, scenario ranking, and exposure vs bottleneck aggregation.
 

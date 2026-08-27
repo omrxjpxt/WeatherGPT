@@ -67,7 +67,7 @@ class TripService:
             mode_options=mode_options,
             hazards=[],
             sources=[
-                DataSource(name="Mock Weather API", type="Weather", last_updated=datetime.now(timezone.utc)),
+                DataSource(name=self.weather_provider.provider_name, type="Weather", last_updated=datetime.now(timezone.utc)),
                 DataSource(name="Mock Routing API", type="Routing", last_updated=datetime.now(timezone.utc)),
             ],
             estimated_duration=result.total_duration,

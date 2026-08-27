@@ -13,10 +13,12 @@ HAZARD_PROXIMITY_RADIUS_KM = 2.0
 def _calculate_precipitation_score(weather: NormalizedWeatherPoint) -> int:
     """
     Isolated precipitation scoring function.
-    MVP Engineering Assumption: 3x mm/hr, capped at 100.
-    In the future, this should be replaced with a proper intensity-duration threshold model.
+    
+    ENGINEERING ASSUMPTION (MVP):
+    Precipitation risk is scored as a linear scalar of hourly accumulation (mm).
+    This assumes `precipitation_mm` acts as a proxy for intensity over the hour.
     """
-    return min(100, int(weather.precipitation * 3.0))
+    return min(100, int(weather.precipitation_mm * 3.0))
 
 def calculate_segment_risk(
     segment: NormalizedRouteSegment,
@@ -44,21 +46,23 @@ def calculate_segment_risk(
     # 3. Hazard Severity (Weather)
     # Precipitation risk (0-100)
     precip_score = _calculate_precipitation_score(weather)
-    if precip_score > 10:
+    
+    if precip_score > 0:
         factors.append(RiskFactor(
             name="Precipitation",
-            description=f"Rainfall of {weather.precipitation} mm/hr expected.",
+            description=f"Rainfall of {weather.precipitation_mm} mm expected in this hour.",
             score=precip_score,
             level=_score_to_level(precip_score),
             weight=0.4
         ))
         
-    # Visibility risk
-    if weather.is_poor_visibility:
+    vis_score = 0
+    if weather.is_poor_visibility or weather.visibility < 1000.0:
+        vis_score = 60
         factors.append(RiskFactor(
             name="Visibility",
-            description="Poor visibility conditions.",
-            score=60,
+            description=f"Poor visibility expected ({weather.visibility} m).",
+            score=vis_score,
             level=RiskLevel.moderate,
             weight=0.2
         ))

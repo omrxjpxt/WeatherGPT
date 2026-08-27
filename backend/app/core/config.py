@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # External APIs
+    weather_provider: str = "open-meteo" # "open-meteo" or "mock"
     weather_api_key: Optional[str] = None
     traffic_api_key: Optional[str] = None
     llm_api_key: Optional[str] = None

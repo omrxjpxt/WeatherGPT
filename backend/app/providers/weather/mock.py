@@ -5,6 +5,10 @@ from app.providers.weather.base import WeatherProvider
 from app.decision_engine.normalized_models import NormalizedWeatherPoint
 
 class MockWeatherProvider(WeatherProvider):
+    @property
+    def provider_name(self) -> str:
+        return "Mock Weather API"
+
     async def get_forecast(self, lat: float, lng: float, start_time: datetime, hours: int) -> List[NormalizedWeatherPoint]:
         await asyncio.sleep(0.1) # Simulate network delay
         
@@ -19,13 +23,17 @@ class MockWeatherProvider(WeatherProvider):
             precip = 28.0 + (i * 2) if is_rainy_window else 0.0
             humidity = 92 if is_rainy_window else 70
             wind = 22.0 if is_rainy_window else 10.0
+            gusts = wind * 1.5
+            vis = 500.0 if is_rainy_window else 10000.0
             
             forecast.append(NormalizedWeatherPoint(
                 time=time,
                 temperature=temp,
-                precipitation=precip,
+                precipitation_mm=precip,
                 humidity=humidity,
                 wind_speed=wind,
+                wind_gusts=gusts,
+                visibility=vis,
                 condition="Heavy Rain" if is_rainy_window else "Partly Cloudy",
                 is_extreme_heat=temp > 40.0,
                 is_poor_visibility=is_rainy_window, # visibility drops in heavy rain

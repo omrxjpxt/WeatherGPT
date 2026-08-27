@@ -7,7 +7,7 @@ WeatherGPT is built on FastAPI and follows a clean architecture pattern. The app
 
 - **API Routes (`app/api/routes`)**: Handle HTTP requests, perform Pydantic validation, and route to services.
 - **Services (`app/services`)**: Orchestrate data gathering from providers, normalize data, and invoke the decision engine.
-- **Providers (`app/providers`)**: Abstract external APIs (Weather, Routing, Traffic, Alerts, LLM). For MVP, these use mock implementations.
+- **Providers (`app/providers`)**: Abstract external APIs (Weather, Routing, Traffic, Alerts, LLM). For MVP, the Weather provider is live (Open-Meteo) with a graceful fallback wrapper, while the others use mock implementations.
 - **Repositories (`app/repositories`)**: Handle persistence. Currently supports in-memory fallback for development if Firestore credentials are missing.
 - **Decision Engine (`app/decision_engine`)**: Pure, deterministic module. Calculates risk, ranks scenarios, and applies alert overrides based on normalized input.
 

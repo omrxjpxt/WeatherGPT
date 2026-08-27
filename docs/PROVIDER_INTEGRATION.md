@@ -18,6 +18,16 @@ In the event of conflicting information or overlapping features, the system hono
 4. **Derived WeatherGPT Calculations** (e.g., deterministic risk score aggregations).
 5. **LLM-generated explanation** (The LLM explains the decision, but never makes or overrides the deterministic risk calculation).
 
+## Live Providers Implementation
+
+### Weather: Open-Meteo
+- **Status**: Implemented
+- **Data Extracted**: `temperature_2m`, `precipitation`, `relative_humidity_2m`, `wind_speed_10m`, `wind_gusts_10m`, `visibility`, `weather_code`.
+- **Visibility**: Uses explicit hourly physical visibility measurements from the API. We do not infer visibility solely from weather codes.
+- **Precipitation**: Open-Meteo returns hourly accumulation in `mm`. The internal decision engine consumes this explicitly as `precipitation_mm` and treats it as an intensity proxy.
+- **WMO Mapping**: Full WMO weather code mapping to string conditions is handled inside the provider adapter.
+- **Attribution & Licensing**: Open-Meteo data is provided via their non-commercial free-tier API under the **CC BY 4.0** license. Any UI consuming this data must explicitly display attribution to Open-Meteo.
+
 ## Failure, Fallback & Timeout Behavior
 Robustness is critical:
 - **Timeouts**: Every external HTTP request must have a strict timeout (e.g., 5 seconds).
