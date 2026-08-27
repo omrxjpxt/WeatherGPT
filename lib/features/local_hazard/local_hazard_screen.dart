@@ -188,12 +188,15 @@ class _LocalHazardBody extends StatelessWidget {
   }
 
   IconData _iconForHazard(HazardType type) => switch (type) {
-    HazardType.waterlogging => CupertinoIcons.drop_fill,
-    HazardType.fog => CupertinoIcons.cloud_fog,
-    HazardType.heavyRain => CupertinoIcons.cloud_heavyrain,
-    HazardType.storm => CupertinoIcons.bolt_fill,
-    HazardType.heatwave => CupertinoIcons.sun_max_fill,
-    HazardType.construction => CupertinoIcons.hammer,
+    HazardType.waterlogging => Icons.water_drop,
+    HazardType.fog => Icons.cloud,
+    HazardType.heavyRain => Icons.thunderstorm,
+    HazardType.wind => Icons.air,
+    HazardType.storm => Icons.flash_on,
+    HazardType.heatwave => Icons.wb_sunny,
+    HazardType.heat => Icons.wb_sunny,
+    HazardType.visibility => Icons.visibility_off,
+    HazardType.construction => Icons.construction,
   };
 
   String _timeAgo(DateTime time) {
