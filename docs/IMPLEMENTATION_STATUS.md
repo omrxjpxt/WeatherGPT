@@ -16,10 +16,18 @@
 - **Official Alerts / Local Hazards:** Implemented map-centric hazard screen and detailed IMD alert screen.
 - **Assistant / Voice:** Conversational input UI implemented. Voice screen has animated pulsing mic, extracting structured `TripRequest` from transcribed Hindi text via simulated Riverpod stream.
 
+## Phase 11: Backend Foundation (FastAPI)
+- **FastAPI Core**: Setup `main.py`, config, and structlog.
+- **Domain Models**: Replicated Flutter's Pydantic models with camelCase aliases.
+- **Engine**: Implemented deterministic decision engine with explicit mode exposure and alert override logic.
+- **Providers**: Created provider interfaces and Mock implementations mimicking Noida->Gurgaon data.
+- **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
+- **Testing**: Exhaustive unit tests for engine determinism, exposure, and override logic.
+
 ## Currently Pending
 - Simulator execution validation (waiting for iOS build).
-- Backend Integration (FastAPI). No backend has been written yet.
+- Switch from mock providers to live integrations (Google Maps, IMD, LLM).
 
 ## Next Steps
-- Verify visual fidelity on an iOS simulator and fix any layout overflows on specific device sizes.
-- Begin backend development when approved by the user.
+- Verify visual fidelity on an iOS simulator.
+- Connect production APIs upon user approval.

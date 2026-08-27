@@ -1,0 +1,29 @@
+from app.providers.weather.mock import MockWeatherProvider
+from app.providers.routing.mock import MockRoutingProvider
+from app.providers.traffic.mock import MockTrafficProvider
+from app.providers.alerts.mock import MockAlertProvider
+from app.providers.llm.mock import MockLLMProvider
+
+from app.services.trip_service import TripService
+from app.services.scenario_service import ScenarioService
+from app.services.assistant_service import AssistantService
+
+# Dependency Injection setup
+weather_provider = MockWeatherProvider()
+routing_provider = MockRoutingProvider()
+traffic_provider = MockTrafficProvider()
+alert_provider = MockAlertProvider()
+llm_provider = MockLLMProvider()
+
+trip_service = TripService(weather_provider, routing_provider, alert_provider)
+scenario_service = ScenarioService(trip_service)
+assistant_service = AssistantService(llm_provider)
+
+def get_trip_service() -> TripService:
+    return trip_service
+
+def get_scenario_service() -> ScenarioService:
+    return scenario_service
+
+def get_assistant_service() -> AssistantService:
+    return assistant_service
