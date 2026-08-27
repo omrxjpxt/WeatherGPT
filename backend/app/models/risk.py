@@ -4,8 +4,8 @@ from app.models.enums import RiskLevel, ConfidenceLevel
 
 class Confidence(WeatherBaseModel):
     level: ConfidenceLevel
-    percentage: int
     explanation: str
+
 
 class RiskFactor(WeatherBaseModel):
     name: str

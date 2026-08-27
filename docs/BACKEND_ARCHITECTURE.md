@@ -16,3 +16,12 @@ To decouple the deterministic engine from external API quirks, all provider data
 
 ## Scenario Traceability
 All trip analysis and scenario results are tagged with a unique `analysis_id` / `scenario_id`. This ID is persisted along with the input context and decision output for auditability and historical replay.
+
+## Decision Engine Policies
+The core logic resides in `app/decision_engine`. 
+
+> [!IMPORTANT]
+> The engine operates purely on **engineering assumptions** regarding mode exposure, risk aggregation (bottleneck vs. duration), geographic proximity (Haversine approximations), and precipitation scaling. These assumptions are fully isolated, explicitly documented, and configurable, allowing seamless replacement with **scientifically supported models** in future iterations without architectural rewrites.
+
+> [!NOTE]
+> **MVP Limitation:** External APIs are mocked. Departure candidate search is constrained to deterministic `-30m` to `+45m` offsets. Alert geometry defaults to regional boundaries when exact polygons are missing.

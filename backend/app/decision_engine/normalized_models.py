@@ -53,3 +53,4 @@ class TripContext(BaseModel):
     weather_timeline: List[NormalizedWeatherPoint]
     hazards: List[NormalizedHazard]
     alerts: List[NormalizedAlert]
+    arrival_deadline: Optional[datetime] = None

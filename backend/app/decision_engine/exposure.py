@@ -4,11 +4,19 @@ def get_mode_exposure_multiplier(mode: TransportMode) -> float:
     """
     Returns the exposure multiplier for a given transport mode.
     
-    Assumptions:
-    - bike: 1.0 (fully exposed to elements)
-    - car: 0.4 (protected from rain/wind, but affected by traffic/waterlogging)
-    - metro: 0.15 (minimal exposure, only last-mile/station access)
-    - walk: 1.1 (fully exposed + longer duration + exertion)
+    ENGINEERING ASSUMPTIONS (MVP):
+    These multipliers are conceptual heuristics, not scientifically calibrated constants.
+    - bike: 1.0 (baseline, fully exposed)
+    - car: 0.4 (protected but affected by traffic/waterlogging)
+    - metro: 0.15 (highly protected)
+    - walk: 1.1 (fully exposed + physical exertion)
+    
+    FUTURE SCALING:
+    This model should be extended to explicitly account for:
+    - Last-mile walking exposure for public transit
+    - Station/platform exposure
+    - Transit disruptions (e.g. metro flooding)
+    Do not assume any mode is universally risk-free.
     """
     if mode == TransportMode.bike:
         return 1.0

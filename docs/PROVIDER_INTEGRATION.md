@@ -1,0 +1,33 @@
+# WeatherGPT Provider Integration Strategy
+
+## Provider Abstraction
+All external data sources in WeatherGPT are hidden behind asynchronous Provider interfaces (e.g., `WeatherProvider`, `RoutingProvider`, `AlertProvider`). 
+- **Decoupling**: The Decision Engine never interacts with raw provider JSON or API-specific structures.
+- **Normalization**: Providers are strictly responsible for fetching external data and mapping it into the internal `Normalized...` Pydantic models (e.g., `NormalizedWeatherPoint`).
+
+## Normalized Data Contracts
+The single source of truth for the Decision Engine is `backend/app/decision_engine/normalized_models.py`.
+- Any external data that cannot be mapped into these models must either be dropped or the internal model must be explicitly upgraded.
+- Provider-specific quirks (e.g., WMO weather codes, OpenWeatherMap weather IDs) must be translated into generic internal formats (e.g., `condition="Heavy Rain"`).
+
+## Source Priority
+In the event of conflicting information or overlapping features, the system honors the following strict priority order:
+1. **Authoritative Emergency/Official Alerts** (e.g., NDMA/IMD Red Alerts).
+2. **Authoritative Official Forecast/Warning Data** where available.
+3. **Primary Weather/Routing/Traffic Providers** (e.g., Open-Meteo, Google Maps).
+4. **Derived WeatherGPT Calculations** (e.g., deterministic risk score aggregations).
+5. **LLM-generated explanation** (The LLM explains the decision, but never makes or overrides the deterministic risk calculation).
+
+## Failure, Fallback & Timeout Behavior
+Robustness is critical:
+- **Timeouts**: Every external HTTP request must have a strict timeout (e.g., 5 seconds).
+- **Retries**: Transient failures (e.g., 5xx errors, network timeouts) should trigger a brief exponential backoff retry.
+- **Graceful Fallback**: If a primary provider fails completely, the system should log the error and degrade gracefully (e.g., fall back to `MockWeatherProvider` during development, or return a standardized error in production).
+
+## Data Freshness & Caching
+- **Freshness Logging**: Every provider must report the `last_updated` timestamp and the specific provider name so it can be passed to the frontend for provenance transparency.
+- **Caching**: Future iterations will implement Redis/In-memory caching to prevent redundant API calls for identical locations and overlapping times.
+
+## Configuration & Secrets
+- **Secrets Management**: No API keys are hardcoded. All keys must be injected via environment variables (e.g., `.env` file read by `pydantic-settings`).
+- **Provider Toggling**: The active provider for each domain (Mock vs Real) should be driven by configuration, not hardcoded instantiation.

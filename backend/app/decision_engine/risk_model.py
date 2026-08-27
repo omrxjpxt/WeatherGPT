@@ -5,6 +5,18 @@ from app.models.enums import RiskLevel, TransportMode
 from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard
 from app.decision_engine.exposure import get_mode_exposure_multiplier
 from app.models.risk import RiskFactor
+from app.decision_engine.spatial import point_to_segment_distance_km
+
+# Engineering assumption for MVP: Hazard affects segment if within this radius
+HAZARD_PROXIMITY_RADIUS_KM = 2.0
+
+def _calculate_precipitation_score(weather: NormalizedWeatherPoint) -> int:
+    """
+    Isolated precipitation scoring function.
+    MVP Engineering Assumption: 3x mm/hr, capped at 100.
+    In the future, this should be replaced with a proper intensity-duration threshold model.
+    """
+    return min(100, int(weather.precipitation * 3.0))
 
 def calculate_segment_risk(
     segment: NormalizedRouteSegment,
@@ -31,13 +43,13 @@ def calculate_segment_risk(
     
     # 3. Hazard Severity (Weather)
     # Precipitation risk (0-100)
-    precip_score = min(100.0, weather.precipitation * 3.0) 
+    precip_score = _calculate_precipitation_score(weather)
     if precip_score > 10:
         factors.append(RiskFactor(
             name="Precipitation",
             description=f"Rainfall of {weather.precipitation} mm/hr expected.",
-            score=int(precip_score),
-            level=_score_to_level(int(precip_score)),
+            score=precip_score,
+            level=_score_to_level(precip_score),
             weight=0.4
         ))
         
@@ -52,17 +64,18 @@ def calculate_segment_risk(
         ))
         
     # 4. Route Exposure (Hazards intersecting this segment)
-    # Mock simple spatial intersection (using bounding box of segment start/end)
     segment_hazards_score = 0
     for h in hazards:
-        lat_min, lat_max = min(segment.start_lat, segment.end_lat), max(segment.start_lat, segment.end_lat)
-        lng_min, lng_max = min(segment.start_lng, segment.end_lng), max(segment.start_lng, segment.end_lng)
-        # Expand bbox slightly for matching
-        if (lat_min - 0.05) <= h.lat <= (lat_max + 0.05) and (lng_min - 0.05) <= h.lng <= (lng_max + 0.05):
+        dist_km = point_to_segment_distance_km(
+            h.lat, h.lng,
+            segment.start_lat, segment.start_lng,
+            segment.end_lat, segment.end_lng
+        )
+        if dist_km <= HAZARD_PROXIMITY_RADIUS_KM:
             segment_hazards_score = max(segment_hazards_score, h.severity_score)
             factors.append(RiskFactor(
                 name="Local Hazard",
-                description=f"Route intersects hazard: {h.type.value}",
+                description=f"Route near hazard: {h.type.value} ({dist_km:.1f}km away)",
                 score=h.severity_score,
                 level=_score_to_level(h.severity_score),
                 weight=0.3

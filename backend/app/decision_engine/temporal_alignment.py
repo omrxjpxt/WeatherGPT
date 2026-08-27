@@ -11,6 +11,15 @@ def align_route_with_weather(
     Given a route and departure time, estimates when the user reaches each segment.
     Associates the relevant weather data with each segment and time.
     
+    MVP ENGINEERING ASSUMPTION (Forecast-bucket alignment):
+    Currently uses nearest-weather-point logic. This matches segment arrival time
+    to the nearest available forecast bucket in the timeline.
+    
+    LIMITATION:
+    This does NOT imply exact weather certainty at every timestamp. 
+    It is an approximation of expected conditions. Future versions may interpolate 
+    between buckets or use probabilistic bands.
+    
     Architected so future ETA uncertainty can be represented (currently using exact estimated_duration).
     """
     aligned_segments = []

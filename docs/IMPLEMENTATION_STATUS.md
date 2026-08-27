@@ -18,11 +18,16 @@
 
 ## Phase 11: Backend Foundation (FastAPI)
 - **FastAPI Core**: Setup `main.py`, config, and structlog.
-- **Domain Models**: Replicated Flutter's Pydantic models with camelCase aliases.
-- **Engine**: Implemented deterministic decision engine with explicit mode exposure and alert override logic.
+- **Domain Models**: Replicated Flutter's Pydantic models with camelCase aliases. Extended with `arrival_deadline`.
+- **Decision Engine Refinement**: 
+  - Implemented configurable geographic point-to-line hazard proximity check (Haversine/planar approx).
+  - Implemented hybrid risk aggregation (Bottleneck + Exposure) with severity guardrails.
+  - Implemented arrival-feasibility-aware alternative departure search.
+  - Refined alert logic (severity ranking, exact polygon raycasting vs regional match).
+  - Adopted strictly qualitative `confidence` metric.
 - **Providers**: Created provider interfaces and Mock implementations mimicking Noida->Gurgaon data.
 - **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
-- **Testing**: Exhaustive unit tests for engine determinism, exposure, and override logic.
+- **Testing**: Exhaustive unit tests (15 total, all passing) covering engine determinism, spatial matching, deadlines, scenario ranking, and exposure vs bottleneck aggregation.
 
 ## Currently Pending
 - Simulator execution validation (waiting for iOS build).

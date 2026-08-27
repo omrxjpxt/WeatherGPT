@@ -34,6 +34,7 @@ class TripRequest(WeatherBaseModel):
     destination: str
     departure_time: datetime
     mode: TransportMode
+    arrival_deadline: Optional[datetime] = None
 
 class TripResponse(WeatherBaseModel):
     analysis_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
