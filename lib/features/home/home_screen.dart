@@ -22,69 +22,76 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.warmIvory,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: Spacing.lg),
-              // ── Header ──
-              _buildHeader(context),
-              const SizedBox(height: Spacing.stackLg),
-
-              // ── Current Weather Card ──
-              weatherAsync.when(
-                data: (weather) => _buildWeatherCard(weather),
-                loading: () => const _LoadingCard(),
-                error: (_, __) => const _ErrorCard(message: 'Weather unavailable'),
+        child: Stack(
+          children: [
+            // ── Scrollable Content ──
+            SingleChildScrollView(
+              padding: const EdgeInsets.only(
+                left: Spacing.pagePadding,
+                right: Spacing.pagePadding,
+                bottom: 120, // Sufficient padding to scroll past the floating input
               ),
-              const SizedBox(height: Spacing.stackLg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: Spacing.lg),
+                  // ── Header ──
+                  _buildHeader(context),
+                  const SizedBox(height: Spacing.stackLg),
 
-              // ── Active Alerts Banner ──
-              alertsAsync.when(
-                data: (alerts) {
-                  if (alerts.isEmpty) return const SizedBox.shrink();
-                  return _buildAlertBanner(context, alerts.first);
-                },
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
+                  // ── Current Weather Card ──
+                  weatherAsync.when(
+                    data: (weather) => _buildWeatherCard(weather),
+                    loading: () => const _LoadingCard(),
+                    error: (_, __) => const _ErrorCard(message: 'Weather unavailable'),
+                  ),
+                  const SizedBox(height: Spacing.stackLg),
+
+                  // ── Active Alerts Banner ──
+                  alertsAsync.when(
+                    data: (alerts) {
+                      if (alerts.isEmpty) return const SizedBox.shrink();
+                      return _buildAlertBanner(context, alerts.first);
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: Spacing.stackLg),
+
+                  // ── Quick Trip Summary ──
+                  tripAsync.when(
+                    data: (trip) => _buildTripSummary(context, trip),
+                    loading: () => const _LoadingCard(),
+                    error: (_, __) => const _ErrorCard(message: 'Trip analysis unavailable'),
+                  ),
+                  const SizedBox(height: Spacing.stackLg),
+
+                  // ── AI Insight ──
+                  tripAsync.when(
+                    data: (trip) => _buildAIInsight(context, trip),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: Spacing.stackLg),
+
+                  // ── Quick Actions ──
+                  _buildQuickActions(context),
+                  const SizedBox(height: Spacing.sectionMargin),
+                ],
               ),
-              const SizedBox(height: Spacing.stackLg),
+            ),
 
-              // ── Quick Trip Summary ──
-              tripAsync.when(
-                data: (trip) => _buildTripSummary(context, trip),
-                loading: () => const _LoadingCard(),
-                error: (_, __) => const _ErrorCard(message: 'Trip analysis unavailable'),
+            // ── Floating Conversational Input ──
+            Positioned(
+              left: Spacing.pagePadding,
+              right: Spacing.pagePadding,
+              bottom: 16,
+              child: ConversationalInputBar(
+                onTap: () => context.push('/assistant'),
+                onMicTap: () => context.push('/voice'),
               ),
-              const SizedBox(height: Spacing.stackLg),
-
-              // ── AI Insight ──
-              tripAsync.when(
-                data: (trip) => _buildAIInsight(context, trip),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              const SizedBox(height: Spacing.stackLg),
-
-              // ── Quick Actions ──
-              _buildQuickActions(context),
-              const SizedBox(height: Spacing.sectionMargin),
-            ],
-          ),
-        ),
-      ),
-      // ── Floating Conversational Input ──
-      bottomSheet: Container(
-        color: Colors.transparent,
-        padding: EdgeInsets.only(
-          left: Spacing.pagePadding,
-          right: Spacing.pagePadding,
-          bottom: MediaQuery.of(context).padding.bottom + 8,
-        ),
-        child: ConversationalInputBar(
-          onTap: () => context.push('/assistant'),
-          onMicTap: () => context.push('/voice'),
+            ),
+          ],
         ),
       ),
     );
