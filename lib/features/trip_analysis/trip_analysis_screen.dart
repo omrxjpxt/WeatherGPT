@@ -100,13 +100,16 @@ class _TripAnalysisBody extends StatelessWidget {
                                 style: AppTypography.bodySm.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        if (trip.risk != null)
+                        if (trip.risk != null) ...[
+                          const SizedBox(width: 12),
                           RiskBadge(level: trip.risk!.level),
+                        ],
                       ],
                     ),
                   ),
@@ -128,7 +131,20 @@ class _TripAnalysisBody extends StatelessWidget {
               // Route segments
               const SectionTitle(title: 'Route Segments'),
               const SizedBox(height: Spacing.stackSm),
-              ...trip.route.map((seg) => _buildSegmentRow(seg)),
+              if (trip.route.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    trip.status == TripStatus.routingUnavailable
+                        ? 'Routing is currently unavailable.'
+                        : 'No route segments available.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                ...trip.route.map((seg) => _buildSegmentRow(seg)),
               const SizedBox(height: Spacing.stackLg),
 
               // Hazards
@@ -157,12 +173,13 @@ class _TripAnalysisBody extends StatelessWidget {
     return WeatherCard(
       child: Row(
         children: [
-          if (trip.risk != null)
+          if (trip.risk != null) ...[
             RiskScoreIndicator(
               score: trip.risk!.overallScore,
               level: trip.risk!.level,
             ),
-          const SizedBox(width: Spacing.md),
+            const SizedBox(width: Spacing.md),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,10 +325,14 @@ class _TripAnalysisBody extends StatelessWidget {
               const Icon(CupertinoIcons.lightbulb_fill,
                   color: AppColors.sunriseAmber, size: 20),
               const SizedBox(width: 8),
-              Text(
-                'Recommendation',
-                style: AppTypography.headlineMd.copyWith(
-                  color: AppColors.onPrimary,
+              Expanded(
+                child: Text(
+                  'Recommendation',
+                  style: AppTypography.headlineMd.copyWith(
+                    color: AppColors.onPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -399,7 +420,7 @@ class _RouteMap extends StatelessWidget {
       ));
     }
 
-    final bounds = LatLngBounds.fromPoints(allPoints);
+    final bounds = allPoints.isNotEmpty ? LatLngBounds.fromPoints(allPoints) : null;
 
     final hazardMarkers = hazards.map((h) => Marker(
           point: LatLng(h.lat, h.lng),
@@ -421,10 +442,14 @@ class _RouteMap extends StatelessWidget {
 
     return FlutterMap(
       options: MapOptions(
-        initialCameraFit: CameraFit.bounds(
-          bounds: bounds,
-          padding: const EdgeInsets.all(48),
-        ),
+        initialCenter: const LatLng(28.6139, 77.2090),
+        initialZoom: 11,
+        initialCameraFit: bounds != null
+            ? CameraFit.bounds(
+                bounds: bounds,
+                padding: const EdgeInsets.all(48),
+              )
+            : null,
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
         ),
@@ -519,13 +544,18 @@ class _ActionButton extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: AppColors.onPrimary, size: 18),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: AppTypography.buttonLabel.copyWith(
-                color: AppColors.onPrimary,
+            Flexible(
+              child: Text(
+                label,
+                style: AppTypography.buttonLabel.copyWith(
+                  color: AppColors.onPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

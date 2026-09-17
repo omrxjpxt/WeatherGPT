@@ -19,13 +19,20 @@ class SectionTitle extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title.toUpperCase(),
-          style: AppTypography.sectionTitle.copyWith(
-            color: AppColors.onSurfaceVariant,
+        Flexible(
+          child: Text(
+            title.toUpperCase(),
+            style: AppTypography.sectionTitle.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (trailing != null) trailing!,
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }

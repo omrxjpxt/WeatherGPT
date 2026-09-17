@@ -44,21 +44,39 @@ class AlertsFeedScreen extends ConsumerWidget {
               ),
             ),
             alertsAsync.when(
-              data: (alerts) => SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final alert = alerts[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: Spacing.stackMd),
-                        child: _AlertCard(alert: alert),
-                      );
-                    },
-                    childCount: alerts.length,
+              data: (alerts) {
+                if (alerts.isEmpty) {
+                  return SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(Spacing.pagePadding),
+                        child: Text(
+                          'No active alerts for Delhi-NCR.',
+                          style: AppTypography.bodyMd.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final alert = alerts[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: Spacing.stackMd),
+                          child: _AlertCard(alert: alert),
+                        );
+                      },
+                      childCount: alerts.length,
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
               loading: () => const SliverFillRemaining(
                 child: Center(
                   child: CircularProgressIndicator(color: AppColors.sunriseAmber),
@@ -171,14 +189,18 @@ class _AlertCard extends StatelessWidget {
             const SizedBox(height: Spacing.stackMd),
             Row(
               children: [
-                Text(
-                  alert.issuedBy,
-                  style: AppTypography.labelCaps.copyWith(
-                    color: AppColors.outline,
+                Expanded(
+                  child: Text(
+                    alert.issuedBy,
+                    style: AppTypography.labelCaps.copyWith(
+                      color: AppColors.outline,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
-                Icon(CupertinoIcons.chevron_right,
+                const SizedBox(width: 8),
+                const Icon(CupertinoIcons.chevron_right,
                     size: 14, color: AppColors.onSurfaceVariant),
               ],
             ),

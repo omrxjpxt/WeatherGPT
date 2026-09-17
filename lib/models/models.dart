@@ -1,6 +1,7 @@
 /// WeatherGPT Domain Models
 /// These represent the structured decision objects from the future backend.
 /// Flutter consumes these — it does NOT compute risk or weather logic.
+library;
 
 // ── Enums ──
 
@@ -18,7 +19,23 @@ enum TripStatus {
   success,
   routingUnavailable,
   weatherUnavailable,
-  degraded,
+  degraded;
+
+  static TripStatus fromString(String? value) {
+    switch (value) {
+      case 'routing_unavailable':
+      case 'routingUnavailable':
+        return TripStatus.routingUnavailable;
+      case 'weather_unavailable':
+      case 'weatherUnavailable':
+        return TripStatus.weatherUnavailable;
+      case 'degraded':
+        return TripStatus.degraded;
+      case 'success':
+      default:
+        return TripStatus.success;
+    }
+  }
 }
 
 // ── Core Models ──
@@ -95,10 +112,7 @@ class TripResponse {
   factory TripResponse.fromJson(Map<String, dynamic> json) {
     return TripResponse(
       analysisId: json['analysisId'] as String?,
-      status: TripStatus.values.firstWhere(
-        (e) => e.name == json['status'],
-        orElse: () => TripStatus.success,
-      ),
+      status: TripStatus.fromString(json['status'] as String?),
       request: TripRequest.fromJson(json['request'] as Map<String, dynamic>),
       risk: json['risk'] != null ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>) : null,
       route: (json['route'] as List).map((e) => RouteSegment.fromJson(e as Map<String, dynamic>)).toList(),
@@ -449,10 +463,7 @@ class ScenarioResult {
   factory ScenarioResult.fromJson(Map<String, dynamic> json) {
     return ScenarioResult(
       scenarioId: json['scenarioId'] as String?,
-      status: TripStatus.values.firstWhere(
-        (e) => e.name == json['status'],
-        orElse: () => TripStatus.success,
-      ),
+      status: TripStatus.fromString(json['status'] as String?),
       departureTime: DateTime.parse(json['departureTime'] as String).toLocal(),
       risk: json['risk'] != null ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>) : null,
       estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
@@ -605,6 +616,12 @@ Duration _parseDuration(String durationString) {
           int minutes = int.parse(parts[1]);
           int seconds = double.parse(parts[2]).round();
           return Duration(hours: hours, minutes: minutes, seconds: seconds);
+      }
+
+      // Format like raw seconds "3300"
+      final totalSeconds = int.tryParse(durationString);
+      if (totalSeconds != null) {
+        return Duration(seconds: totalSeconds);
       }
   } catch (e) {
       // Fallback

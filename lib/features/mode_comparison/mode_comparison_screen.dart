@@ -35,7 +35,23 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
       ),
       body: modesAsync.when(
         data: (modes) {
-          final current = modes.firstWhere((m) => m.mode == _selected);
+          if (modes.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(Spacing.pagePadding),
+                child: Text(
+                  'Mode comparison is currently unavailable.',
+                  style: AppTypography.bodyMd.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            );
+          }
+          final current = modes.firstWhere(
+            (m) => m.mode == _selected,
+            orElse: () => modes.first,
+          );
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
             child: Column(
@@ -63,15 +79,20 @@ class _ModeComparisonState extends ConsumerState<ModeComparisonScreen> {
                             Icon(_iconForMode(_selected),
                                 color: AppColors.primaryText, size: 28),
                             const SizedBox(width: 12),
-                            Text(
-                              _labelForMode(_selected),
-                              style: AppTypography.headlineMd.copyWith(
-                                color: AppColors.primaryText,
+                            Expanded(
+                              child: Text(
+                                _labelForMode(_selected),
+                                style: AppTypography.headlineMd.copyWith(
+                                  color: AppColors.primaryText,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Spacer(),
-                           if (current.risk != null)
-                            RiskBadge(level: current.risk!.level),
+                            if (current.risk != null) ...[
+                              const SizedBox(width: 8),
+                              RiskBadge(level: current.risk!.level),
+                            ],
                           ],
                         ),
                         const SizedBox(height: Spacing.stackMd),

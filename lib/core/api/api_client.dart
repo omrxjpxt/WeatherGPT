@@ -32,7 +32,7 @@ class ApiClient {
         type: ApiErrorType.timeout,
         message: 'The connection has timed out, please try again.',
       );
-    } on SocketException catch (e) {
+    } on SocketException {
       throw ApiException(
         type: ApiErrorType.networkError,
         message: 'No internet connection or backend unreachable.',

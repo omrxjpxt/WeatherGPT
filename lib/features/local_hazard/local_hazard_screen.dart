@@ -137,6 +137,19 @@ class _LocalHazardBody extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: Spacing.stackLg),
+              ] else ...[
+                WeatherCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Spacing.md),
+                    child: Text(
+                      'No local hazards reported for this route.',
+                      style: AppTypography.bodySm.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Spacing.stackLg),
               ],
 
               // All hazards
@@ -173,10 +186,14 @@ class _LocalHazardBody extends StatelessWidget {
                   Text(hazard.title,
                       style: AppTypography.labelMd.copyWith(
                           color: AppColors.primaryText,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                   Text(hazard.source ?? '',
                       style: AppTypography.labelCaps.copyWith(
-                          color: AppColors.onSurfaceVariant)),
+                          color: AppColors.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -286,9 +303,15 @@ class _InfoRow extends StatelessWidget {
               style: AppTypography.labelCaps.copyWith(
                   color: AppColors.onSurfaceVariant)),
         ),
-        Text(value,
+        Expanded(
+          child: Text(
+            value,
             style: AppTypography.bodySm.copyWith(
-                color: AppColors.primaryText)),
+                color: AppColors.primaryText),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

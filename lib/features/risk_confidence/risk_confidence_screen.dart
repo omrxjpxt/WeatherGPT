@@ -122,13 +122,35 @@ class RiskConfidenceScreen extends ConsumerWidget {
               // ── Risk Factors ──
               const SectionTitle(title: 'Risk Factors'),
               const SizedBox(height: Spacing.stackMd),
-              if (trip.risk != null) ...trip.risk!.factors.map((f) => _buildFactorCard(f)),
+              if (trip.risk != null)
+                ...trip.risk!.factors.map((f) => _buildFactorCard(f))
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Risk factor breakdown unavailable.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               const SizedBox(height: Spacing.stackLg),
 
               // ── Data Sources ──
               const SectionTitle(title: 'Data Sources'),
               const SizedBox(height: Spacing.stackMd),
-              ...trip.sources.map((s) => _buildSourceRow(s)),
+              if (trip.sources.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No data sources available.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                ...trip.sources.map((s) => _buildSourceRow(s)),
               const SizedBox(height: Spacing.sectionMargin),
             ],
           ),

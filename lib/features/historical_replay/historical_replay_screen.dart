@@ -27,13 +27,28 @@ class HistoricalReplayScreen extends ConsumerWidget {
         title: const Text('Historical Replay'),
       ),
       body: historyAsync.when(
-        data: (events) => ListView.builder(
-          padding: const EdgeInsets.all(Spacing.pagePadding),
-          itemCount: events.length,
-          itemBuilder: (context, index) {
-            return _EventCard(event: events[index]);
-          },
-        ),
+        data: (events) {
+          if (events.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(Spacing.pagePadding),
+                child: Text(
+                  'No historical events available.',
+                  style: AppTypography.bodyMd.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(Spacing.pagePadding),
+            itemCount: events.length,
+            itemBuilder: (context, index) {
+              return _EventCard(event: events[index]);
+            },
+          );
+        },
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.sunriseAmber),
         ),

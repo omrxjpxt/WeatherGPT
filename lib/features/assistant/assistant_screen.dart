@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/tokens.dart';
-import '../../core/widgets/widgets.dart';
 
 /// WeatherGPT Assistant Refined — AI chat interface
 class AssistantScreen extends StatefulWidget {
@@ -92,20 +91,24 @@ class _AssistantScreenState extends State<AssistantScreen> {
           ),
 
           // ── Input Bar ──
-          Container(
-            padding: EdgeInsets.only(
-              left: Spacing.pagePadding,
-              right: Spacing.pagePadding,
-              top: 12,
-              bottom: MediaQuery.of(context).padding.bottom + 12,
-            ),
-            decoration: const BoxDecoration(
-              color: AppColors.warmIvory,
-              border: Border(
-                top: BorderSide(color: AppColors.cardBorderWarm, width: 1),
-              ),
-            ),
-            child: Row(
+          Builder(
+            builder: (context) {
+              final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+              final bottomPadding = isKeyboardOpen ? 12.0 : MediaQuery.of(context).padding.bottom + 12;
+              return Container(
+                padding: EdgeInsets.only(
+                  left: Spacing.pagePadding,
+                  right: Spacing.pagePadding,
+                  top: 12,
+                  bottom: bottomPadding,
+                ),
+                decoration: const BoxDecoration(
+                  color: AppColors.warmIvory,
+                  border: Border(
+                    top: BorderSide(color: AppColors.cardBorderWarm, width: 1),
+                  ),
+                ),
+                child: Row(
               children: [
                 Expanded(
                   child: Container(
@@ -148,6 +151,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 ),
               ],
             ),
+              );
+            },
           ),
         ],
       ),

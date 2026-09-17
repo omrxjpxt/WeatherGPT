@@ -19,8 +19,6 @@ class WhatIfScreen extends ConsumerStatefulWidget {
 
 class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
   double _sliderValue = 4; // index 4 = 8:00 AM (base: 6:00 AM + 4*30 min)
-  late List<ScenarioResult> _scenarios;
-  bool _loaded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +36,24 @@ class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
       ),
       body: scenariosAsync.when(
         data: (scenarios) {
-          _scenarios = scenarios;
-          _loaded = true;
-          final idx = _sliderValue.round().clamp(0, scenarios.length - 1);
+          if (scenarios.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(Spacing.pagePadding),
+                child: Text(
+                  'No scenario simulations available.',
+                  style: AppTypography.bodyMd.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            );
+          }
+          final maxSlider = (scenarios.length - 1).toDouble();
+          final clampedSlider = scenarios.length > 1
+              ? _sliderValue.clamp(0.0, maxSlider)
+              : 0.0;
+          final idx = clampedSlider.round().clamp(0, scenarios.length - 1);
           final current = scenarios[idx];
 
           return SingleChildScrollView(
@@ -68,44 +81,46 @@ class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
                       const SizedBox(height: Spacing.stackMd),
 
                       // ── Slider ──
-                      SliderTheme(
-                        data: SliderThemeData(
-                          activeTrackColor: AppColors.sunriseAmber,
-                          inactiveTrackColor: AppColors.sliderTrack,
-                          thumbColor: AppColors.sliderThumb,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 14,
-                            elevation: 4,
-                          ),
-                          overlayColor: AppColors.sunriseAmber.withValues(alpha: 0.15),
-                          trackHeight: 6,
-                        ),
-                        child: Slider(
-                          value: _sliderValue,
-                          min: 0,
-                          max: (scenarios.length - 1).toDouble(),
-                          divisions: scenarios.length - 1,
-                          onChanged: (v) => setState(() => _sliderValue = v),
-                        ),
-                      ),
-                      // Time range labels
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _formatTime(scenarios.first.departureTime),
-                            style: AppTypography.labelCaps.copyWith(
-                              color: AppColors.onSurfaceVariant,
+                      if (scenarios.length > 1) ...[
+                        SliderTheme(
+                          data: SliderThemeData(
+                            activeTrackColor: AppColors.sunriseAmber,
+                            inactiveTrackColor: AppColors.sliderTrack,
+                            thumbColor: AppColors.sliderThumb,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 14,
+                              elevation: 4,
                             ),
+                            overlayColor: AppColors.sunriseAmber.withValues(alpha: 0.15),
+                            trackHeight: 6,
                           ),
-                          Text(
-                            _formatTime(scenarios.last.departureTime),
-                            style: AppTypography.labelCaps.copyWith(
-                              color: AppColors.onSurfaceVariant,
+                          child: Slider(
+                            value: clampedSlider,
+                            min: 0,
+                            max: maxSlider,
+                            divisions: scenarios.length - 1,
+                            onChanged: (v) => setState(() => _sliderValue = v),
+                          ),
+                        ),
+                        // Time range labels
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _formatTime(scenarios.first.departureTime),
+                              style: AppTypography.labelCaps.copyWith(
+                                color: AppColors.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                            Text(
+                              _formatTime(scenarios.last.departureTime),
+                              style: AppTypography.labelCaps.copyWith(
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

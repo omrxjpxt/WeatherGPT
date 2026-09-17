@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weather_gpt/core/api/api_exception.dart';
-import 'package:weather_gpt/core/api/api_client.dart';
 
 void main() {
   group('ApiException Tests', () {

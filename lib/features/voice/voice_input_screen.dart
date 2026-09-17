@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,26 +20,28 @@ class VoiceInputScreen extends ConsumerStatefulWidget {
 class _VoiceInputScreenState extends ConsumerState<VoiceInputScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
-  bool _hasStarted = false;
+  late final VoiceSessionNotifier _voiceNotifier;
+  Timer? _timer1;
+  Timer? _timer2;
 
   @override
   void initState() {
     super.initState();
+    _voiceNotifier = ref.read(voiceSessionProvider.notifier);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
     // Auto-start listening simulation
-    Future.delayed(const Duration(milliseconds: 500), () {
+    _timer1 = Timer(const Duration(milliseconds: 500), () {
       if (mounted) {
-        ref.read(voiceSessionProvider.notifier).startListening();
-        setState(() => _hasStarted = true);
+        _voiceNotifier.startListening();
 
         // Simulate transcript after 3 seconds
-        Future.delayed(const Duration(seconds: 3), () {
+        _timer2 = Timer(const Duration(seconds: 3), () {
           if (mounted) {
-            ref.read(voiceSessionProvider.notifier).simulateTranscript(
+            _voiceNotifier.simulateTranscript(
               'Bhai kal subah 8 baje college jaana hai, bike se.',
             );
           }
@@ -49,8 +52,10 @@ class _VoiceInputScreenState extends ConsumerState<VoiceInputScreen>
 
   @override
   void dispose() {
+    _timer1?.cancel();
+    _timer2?.cancel();
     _pulseController.dispose();
-    ref.read(voiceSessionProvider.notifier).reset();
+    _voiceNotifier.reset();
     super.dispose();
   }
 
@@ -68,11 +73,16 @@ class _VoiceInputScreenState extends ConsumerState<VoiceInputScreen>
         title: const Text('Voice Input'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
-          child: Column(
-            children: [
-              const Spacer(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: Spacing.pagePadding),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      const Spacer(),
 
               // ── Mic Button with Pulse ──
               AnimatedBuilder(
@@ -221,8 +231,12 @@ class _VoiceInputScreenState extends ConsumerState<VoiceInputScreen>
               ],
 
               const SizedBox(height: Spacing.stackLg),
-            ],
-          ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

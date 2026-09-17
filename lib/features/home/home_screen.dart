@@ -43,7 +43,7 @@ class HomeScreen extends ConsumerWidget {
                   weatherAsync.when(
                     data: (weather) => _buildWeatherCard(weather),
                     loading: () => const _LoadingCard(),
-                    error: (_, __) => const _ErrorCard(message: 'Weather unavailable'),
+                    error: (_, _) => const _ErrorCard(message: 'Weather unavailable'),
                   ),
                   const SizedBox(height: Spacing.stackLg),
 
@@ -54,7 +54,7 @@ class HomeScreen extends ConsumerWidget {
                       return _buildAlertBanner(context, alerts.first);
                     },
                     loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                   ),
                   const SizedBox(height: Spacing.stackLg),
 
@@ -62,7 +62,7 @@ class HomeScreen extends ConsumerWidget {
                   tripAsync.when(
                     data: (trip) => _buildTripSummary(context, trip),
                     loading: () => const _LoadingCard(),
-                    error: (_, __) => const _ErrorCard(message: 'Trip analysis unavailable'),
+                    error: (_, _) => const _ErrorCard(message: 'Trip analysis unavailable'),
                   ),
                   const SizedBox(height: Spacing.stackLg),
 
@@ -70,7 +70,7 @@ class HomeScreen extends ConsumerWidget {
                   tripAsync.when(
                     data: (trip) => _buildAIInsight(context, trip),
                     loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                   ),
                   const SizedBox(height: Spacing.stackLg),
 
@@ -101,24 +101,29 @@ class HomeScreen extends ConsumerWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Good Morning',
-              style: AppTypography.bodySm.copyWith(
-                color: AppColors.onSurfaceVariant,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Good Morning',
+                style: AppTypography.bodySm.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Noida, Sector 62',
-              style: AppTypography.headlineLgMobile.copyWith(
-                color: AppColors.primaryText,
+              const SizedBox(height: 4),
+              Text(
+                'Noida, Sector 62',
+                style: AppTypography.headlineLgMobile.copyWith(
+                  color: AppColors.primaryText,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+        const SizedBox(width: 12),
         Container(
           width: 44,
           height: 44,
@@ -240,59 +245,68 @@ class HomeScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const SectionTitle(title: 'Your Commute'),
-              if (trip.risk != null)
-              RiskBadge(level: trip.risk!.level),
-            ],
+          SectionTitle(
+            title: 'Your Commute',
+            trailing: trip.risk != null
+                ? RiskBadge(level: trip.risk!.level)
+                : null,
           ),
           const SizedBox(height: Spacing.stackMd),
           // Route summary
           Row(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    trip.request.origin,
-                    style: AppTypography.labelMd.copyWith(
-                      color: AppColors.primaryText,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.arrow_downward, size: 14,
-                          color: AppColors.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${trip.distanceKm} km • ${trip.estimatedDuration.inMinutes} min',
-                        style: AppTypography.bodySm.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      trip.request.origin,
+                      style: AppTypography.labelMd.copyWith(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    trip.request.destination,
-                    style: AppTypography.labelMd.copyWith(
-                      color: AppColors.primaryText,
-                      fontWeight: FontWeight.w600,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.arrow_downward, size: 14,
+                            color: AppColors.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '${trip.distanceKm} km • ${trip.estimatedDuration.inMinutes} min',
+                            style: AppTypography.bodySm.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      trip.request.destination,
+                      style: AppTypography.labelMd.copyWith(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              if (trip.risk != null)
-              RiskScoreIndicator(
-                score: trip.risk!.overallScore,
-                level: trip.risk!.level,
-                size: 70,
-              ),
+              if (trip.risk != null) ...[
+                const SizedBox(width: 12),
+                RiskScoreIndicator(
+                  score: trip.risk!.overallScore,
+                  level: trip.risk!.level,
+                  size: 70,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: Spacing.stackMd),
