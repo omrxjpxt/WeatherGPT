@@ -52,3 +52,38 @@ Large Language Models (LLMs) excel at flexible intent parsing and generating flu
   - Safe degradation: provider outages (e.g. routing unavailable) are truthfully explained without fabricated data.
 - **Negative**:
   - LLM explanations are constrained by validator checks, occasionally triggering fallback explanations if the model rephrases facts in unsupported ways.
+
+## ADR-002: Firestore as Persistence Layer Only; Deterministic Decision Engine Remains Authoritative
+
+### Status
+**Accepted** (Phase 17)
+
+### Context
+WeatherGPT requires data persistence for user profiles, saved commutes, historical trip snapshots, and conversational assistant threads. While Firestore offers robust document storage and real-time syncing, its schema-less nature and client-side SDK capabilities risk fragmenting business logic and compromising the single source of truth if not strictly governed. Allowing the Flutter client to write or evaluate data directly against Firestore would bypass the deterministic Decision Engine and violate safety guarantees.
+
+### Decision
+1. **Persistence & Audit Layer Only**:
+   - Firestore is strictly used for persistence, auditing, and storing post-computed results.
+   - It MUST NEVER participate in risk calculation, route selection, alert evaluation, weather evaluation, traffic evaluation, or safety recommendations.
+2. **Backend-Mediated Persistence**:
+   - Flutter must NOT access Firestore directly. All interactions are marshaled through the FastAPI backend.
+   - The Flutter client operates purely over standard HTTP API endpoints (e.g., `/api/v1/users/me/trips`) using Bearer token authentication.
+   - Firestore credentials and security logic are isolated exclusively to the backend.
+3. **Non-Blocking Execution**:
+   - Persistence operations (saving trip decisions, saving assistant messages) must be executed asynchronously (fire-and-forget).
+   - A Firestore write latency or failure MUST NEVER block a trip analysis, degrade risk scores, or strand a traveler.
+4. **Data Isolation & Identity**:
+   - Authenticated Firebase users map to backend identities via Bearer token extraction in the backend middleware.
+   - User data is strictly segregated using the path `users/{uid}/*` enforced by FastAPI, preventing User A from mutating User B's records regardless of API inputs.
+5. **Historical Snapshot Integrity**:
+   - Persisted trip evaluations are treated as immutable historical snapshots.
+   - They are tagged with `isSnapshot=True` and display the original evaluation timestamp to prevent stale weather data from being presented as live.
+
+### Consequences
+- **Positive**:
+   - Security and business logic remain centralized in FastAPI.
+   - Trip decisions remain highly responsive (unaffected by DB latency).
+   - Flutter client footprint remains lightweight, avoiding heavy native Firebase SDKs.
+   - Full backward compatibility and offline/memory-mode support during local development via `MEMORY_MODE` fallbacks.
+- **Negative**:
+   - Lacks real-time Firestore synchronization on the client; requires traditional pull-to-refresh or polling if real-time updates were needed.

@@ -29,9 +29,10 @@ class AssistantService:
     - GroundingValidator prevents hallucinations and guarantees adherence to DecisionFacts.
     """
 
-    def __init__(self, llm_provider: LLMProvider, trip_service: Optional[TripService] = None):
+    def __init__(self, llm_provider: LLMProvider, trip_service: Optional[TripService] = None, conversation_repository: Optional['app.repositories.interfaces.conversation_repository.ConversationRepository'] = None):
         self.llm_provider = llm_provider
         self.trip_service = trip_service
+        self.conversation_repository = conversation_repository
 
     async def parse_intent(self, request: AssistantParseRequest) -> AssistantParseResponse:
         """
@@ -76,7 +77,7 @@ class AssistantService:
             clarification_prompt=clarification_prompt
         )
 
-    async def chat(self, request: AssistantChatRequest) -> AssistantChatResponse:
+    async def chat(self, request: AssistantChatRequest, uid: Optional[str] = None, conversation_id: Optional[str] = None) -> AssistantChatResponse:
         """
         Full end-to-end assistant interaction flow:
         User message -> Intent Extraction -> Backend Validation -> TripService -> Grounding Validator -> Explanation.
@@ -197,7 +198,7 @@ class AssistantService:
         else:
             chat_status = "error"
 
-        return AssistantChatResponse(
+        response = AssistantChatResponse(
             message=final_explanation,
             intent=intent,
             trip_request=trip_req,
@@ -206,6 +207,12 @@ class AssistantService:
             provenance=self.llm_provider.provenance,
             grounding_fallback_used=fallback_used
         )
+
+        if uid and conversation_id and self.conversation_repository:
+            import asyncio
+            asyncio.create_task(self.conversation_repository.save_message(uid, conversation_id, request, response))
+
+        return response
 
     def _build_decision_facts(self, req: TripRequest, res: TripResponse) -> DecisionFacts:
         """Extracts strictly authoritative fields from TripResponse into DecisionFacts."""

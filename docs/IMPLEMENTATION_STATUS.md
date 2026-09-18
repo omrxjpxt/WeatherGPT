@@ -132,14 +132,22 @@
   - Flutter: **34/34 passing** (`flutter test`), including iPhone SE and iPhone 15 Pro chat widget tests.
   - Analysis: **0 issues** (`flutter analyze`).
 
+## Phase 17: Firestore / Data Persistence Integration (Complete)
+- 🟢 **Backend-Mediated Architecture**: Firestore integration is exclusively managed by the FastAPI backend. The Flutter client has NO direct access to Firestore.
+- 🟢 **Persistence & Audit Layer Only**: Firestore acts strictly as a data store. It has zero decision authority. The deterministic Decision Engine remains authoritative.
+- 🟢 **Non-Blocking Persistence**: All `TripService` and `AssistantService` Firestore write operations use `asyncio.create_task` fire-and-forget saving, ensuring that DB latency/failures never delay or block user responses.
+- 🟢 **User Identity & Data Isolation**: `get_current_user` extracts Bearer tokens. Data is safely scoped to `users/{uid}/*` paths, completely isolating user records.
+- 🟢 **Repository Abstractions**: Implemented `UserRepository`, `ConversationRepository`, and `TripRepository` interfaces with `Firestore`-backed and 100% `MEMORY_MODE` compatible implementations for local dev/testing.
+- 🟢 **Historical Snapshots**: Trip decisions are stamped as `isSnapshot=True` with immutable data payloads to preserve historical context.
+- 🟢 **Flutter Client Agnostic**: The `/api/v1/users/me/*` endpoints natively return camelCase JSON, matching the existing `ApiClient` models perfectly.
+- 🟢 **Test Verification**:
+  - Backend: **100/100 passing** (`pytest backend/tests`), including integration tests verifying fire-and-forget persistence and `MEMORY_MODE` safety.
+
 ## Currently Pending
 - Production API credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
 - Production Traffic Provider (TomTom / Google Traffic).
 - Direct authoritative IMD CAP integration (pending government IP whitelisting).
-- Firestore persistence integration.
+- Flutter Firebase Auth UI integration (Phase 18).
 
 ## Next Steps
-- Implement Firestore persistence when requested.
-
-
-
+- Implement Flutter Firebase Auth and Client Data Persistence.

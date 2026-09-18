@@ -101,3 +101,18 @@ The core logic resides in `app/decision_engine`.
 
 > [!NOTE]
 > **MVP Limitation:** External traffic uses deterministic mock calculations based on hour-of-day and transport mode (free-flow for walk/metro, delay for motorized during rush hours). Departure candidate search is constrained to deterministic `-30m` to `+45m` offsets. Alert geometry defaults to regional boundaries when exact polygons are missing.
+
+## Persistence & Audit Architecture (Phase 17)
+Data persistence uses Firebase Firestore solely as a backend-mediated audit and history layer, adhering strictly to **ADR-002**.
+
+### Core Constraints
+1. **Firestore is Persistence Only**: Firestore MUST NEVER participate in risk calculation, route selection, alert evaluation, traffic assessment, or recommendations. The deterministic Decision Engine remains authoritative.
+2. **Backend-Mediated Interaction**: The Flutter client has ZERO direct access to Firestore. All persistence is managed by FastAPI using the `firebase-admin` SDK. This centralizes security and prevents client-side logic fragmentation.
+3. **Non-Blocking Write Strategy**: To ensure highly responsive decisions, all write operations (`TripRepository.save_trip_decision`, `ConversationRepository.save_message`) are executed asynchronously via `asyncio.create_task` fire-and-forget mechanisms in the service layer (`TripService`, `AssistantService`). DB latency or transient failures will never block a trip assessment.
+4. **Data Isolation**: User requests are authenticated via Bearer tokens extracted by `app.api.auth.get_current_user`. The FastAPI dependency passes the `uid` explicitly to repository calls, securely isolating user records under `users/{uid}/*` paths.
+
+### Memory Mode Fallback
+To ensure seamless local development and integration testing without requiring service account credentials, all Firestore-backed repositories gracefully fallback to `MEMORY_MODE` if `settings.firestore_project_id` is missing. 
+- In `MEMORY_MODE`, repositories utilize in-memory dictionaries.
+- Data structures emulate Firestore behavior, including synthetic timestamps for accurate sorting logic.
+- Log warnings are emitted on application start notifying developers that data will be lost on restart.

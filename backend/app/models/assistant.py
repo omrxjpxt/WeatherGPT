@@ -80,6 +80,7 @@ class AssistantChatRequest(WeatherBaseModel):
     context_destination: Optional[str] = None
     context_mode: Optional[TransportMode] = None
     context_time: Optional[datetime] = None
+    conversation_id: Optional[str] = None
 
 
 class AssistantChatResponse(WeatherBaseModel):

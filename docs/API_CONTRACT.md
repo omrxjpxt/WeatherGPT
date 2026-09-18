@@ -204,3 +204,42 @@ Lightweight intent extraction endpoint without executing trip analysis.
 
 *Note: All JSON keys use `camelCase` to directly match the Flutter client models.*
 
+### 8. Users
+`GET /users/me/profile`
+`PUT /users/me/profile`
+**Model: `UserProfile`**
+- `uid`: str
+- `email`: Optional[str]
+- `displayName`: Optional[str]
+- `homeAddress`: Optional[str]
+- `workAddress`: Optional[str]
+- `defaultMode`: Optional[str]
+
+`GET /users/me/saved-routes`
+`POST /users/me/saved-routes`
+`DELETE /users/me/saved-routes/{savedRouteId}`
+**Model: `SavedRoute`**
+- `id`: str
+- `name`: str
+- `originId`: str
+- `destinationId`: str
+
+`GET /users/me/trips`
+**Model: `TripHistorySummary`**
+- `analysisId`: str
+- `status`: str
+- `origin`, `destination`, `mode`: str
+- `riskLevel`: Optional[str]
+- `recommendationHeadline`: Optional[str]
+- `createdAt`: datetime
+- `isSnapshot`: bool
+
+`GET /users/me/trips/{analysisId}`
+Returns the full `TripResponse` snapshot.
+
+`GET /users/me/conversations`
+**Model: `ConversationSummary`**
+- `id`: str
+- `tripId`: str
+- `title`: str
+- `createdAt`: datetime

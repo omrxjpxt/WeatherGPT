@@ -25,7 +25,8 @@ class TripService:
         traffic_provider: Optional[TrafficProvider] = None,
         secondary_weather_provider: Optional[WeatherProvider] = None,
         secondary_alert_provider: Optional[AlertProvider] = None,
-        hazard_repository: Optional['app.repositories.hazard_repository.HazardRepository'] = None,
+        hazard_repository: Optional['app.repositories.interfaces.hazard_repository.HazardRepository'] = None,
+        trip_repository: Optional['app.repositories.interfaces.trip_repository.TripRepository'] = None,
     ):
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
@@ -34,6 +35,7 @@ class TripService:
         self.secondary_weather_provider = secondary_weather_provider
         self.secondary_alert_provider = secondary_alert_provider
         self.hazard_repository = hazard_repository
+        self.trip_repository = trip_repository
         
         self.engine = DecisionEngine()
         self.route_evaluator = RouteEvaluator(self.engine)
@@ -71,7 +73,7 @@ class TripService:
                 alert.is_override_eligible = False
         return alerts
 
-    async def analyze_trip(self, request: TripRequest) -> TripResponse:
+    async def analyze_trip(self, request: TripRequest, uid: Optional[str] = None) -> TripResponse:
         origin_lat, origin_lng = self._mock_geocode(request.origin)
         dest_lat, dest_lng = self._mock_geocode(request.destination)
         
@@ -262,7 +264,7 @@ class TripService:
             except ValueError:
                 suggested_mode = None
 
-        return TripResponse(
+        response = TripResponse(
             analysis_id=analysis_id,
             request=request,
             risk=selected_route.risk,
@@ -281,3 +283,9 @@ class TripService:
             traffic=selected_route.traffic,
             routes=ranked_routes
         )
+
+        if uid and self.trip_repository:
+            # Fire-and-forget to avoid blocking the user request
+            asyncio.create_task(self.trip_repository.save_trip_decision(uid, response))
+
+        return response
