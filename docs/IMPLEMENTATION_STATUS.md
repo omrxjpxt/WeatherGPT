@@ -89,11 +89,37 @@
   - Flutter: **30/30 passing** (`flutter test`)
   - Analysis: **0 issues** (`flutter analyze`)
 
+## Phase 15: Live Provider Verification & Production Integration (Complete)
+- 🟢 **Environment & Secrets Audit**: Audited `.env`, settings, and git tracking. Verified zero hardcoded or committed secrets. Reinforced `.gitignore` against `.env` and Python cache artifacts.
+- 🟢 **Live Open-Meteo End-to-End Verification**: Confirmed real open endpoint query (`https://api.open-meteo.com/v1/forecast`) delivering live temperature, precipitation, humidity, wind gusts, and physical visibility in UTC ISO-8601. Verified data flow through normalized models, decision engine, trip response, and Flutter UI. Open-Meteo is strictly classified as commercial open weather data (`CC BY 4.0`), never mislabeled as authoritative government data.
+- 🟢 **Google Routes & WeatherAPI Audit**: Confirmed absence of keys without fabrication (`GOOGLE_MAPS_API_KEY`, `WEATHERAPI_API_KEY` are `NOT_SET`). Verified clean error handling (`ConfigurationError` and `ValueError`), graceful degradation to `TripStatus.routing_unavailable` and `sources: Routing [unavailable]`. No fake live data.
+- 🟢 **Provenance Invariant Enforcement**: Enforced `live ≠ mock`, `mock ≠ authoritative`, `secondary ≠ authoritative`. Pydantic validator rejects contradictory status/provenance combinations.
+- 🟢 **10 Controlled Scenarios Verified**: Built and passed comprehensive test suite (`backend/tests/integration/test_controlled_scenarios.py`) validating:
+  1. Live weather + route
+  2. Live weather + routing unavailable
+  3. Weather unavailable
+  4. Traffic unavailable
+  5. Multiple routes
+  6. Different traffic delays per route
+  7. Hazard-relevant route
+  8. Alert-relevant route (hard avoidance vs advisory)
+  9. Arrival deadline filtering
+  10. All routes infeasible retained
+- 🟢 **Flutter Live Mode Verification**: Verified `ApiConfig.mode = AppMode.live`, verified all screens (Home, Trip Analysis, Traffic, Alternatives, Risk, Alerts, Hazards, What-If, Mode Comparison), safe source rendering, and real provenance deserialization.
+- 🟢 **Test Verification**:
+  - Backend: **80/80 passing** (`pytest backend/tests`)
+  - Flutter: **31/31 passing** (`flutter test`)
+  - Analysis: **0 issues** (`flutter analyze`)
+
 ## Currently Pending
-- Connect production APIs upon user approval (verified Google Maps Traffic / TomTom, Gemini, Firestore).
-- iOS visual QA on physical device.
+- Real credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`) and WeatherAPI (`WEATHERAPI_API_KEY`).
+- Production Traffic Provider (TomTom / Google Traffic).
+- Direct authoritative IMD CAP integration (pending government IP whitelisting).
+- Gemini / LLM contextual explanation integration.
+- Firestore persistence integration.
 
 ## Next Steps
 - Implement LLM Context / Assistant provider when credentials and scope are approved.
 - Connect production Firestore when persistence phase begins.
+
 

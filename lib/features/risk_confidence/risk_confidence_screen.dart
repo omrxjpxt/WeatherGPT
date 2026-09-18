@@ -248,7 +248,7 @@ class RiskConfidenceScreen extends ConsumerWidget {
             ),
             child: Center(
               child: Text(
-                source.type[0],
+                source.type.isNotEmpty ? source.type[0] : 'S',
                 style: AppTypography.labelMd.copyWith(
                   color: AppColors.primaryText,
                   fontWeight: FontWeight.w700,

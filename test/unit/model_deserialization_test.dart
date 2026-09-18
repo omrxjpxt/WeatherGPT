@@ -465,6 +465,90 @@ void main() {
       expect(serialized['routes'], isList);
       expect((serialized['routes'] as List).length, 2);
     });
+
+    test('Live Open-Meteo and degraded provider provenance deserialization', () {
+      final json = {
+        'analysisId': 'live-om-101',
+        'status': 'success',
+        'request': {
+          'origin': 'Noida Sector 62',
+          'destination': 'Gurgaon Cyber Hub',
+          'departureTime': '2026-09-19T08:00:00Z',
+          'mode': 'car'
+        },
+        'risk': {
+          'overallScore': 22,
+          'level': 'low',
+          'confidence': {
+            'level': 'high',
+            'explanation': 'Based on real Open-Meteo data.'
+          },
+          'factors': [],
+          'summary': 'Favorable conditions'
+        },
+        'route': [],
+        'recommendation': {
+          'headline': 'Depart now',
+          'body': 'Clear road and sky conditions',
+          'alternativeAction': 'none'
+        },
+        'modeOptions': [],
+        'hazards': [],
+        'sources': [
+          {
+            'name': 'Open-Meteo API',
+            'type': 'Weather (Primary)',
+            'lastUpdated': '2026-09-19T00:00:00Z'
+          },
+          {
+            'name': 'Mock Routing API',
+            'type': 'Routing [mock]',
+            'lastUpdated': '2026-09-19T00:00:00Z'
+          },
+          {
+            'name': 'WeatherGPT Internal Mock',
+            'type': 'Alerts [demo]',
+            'lastUpdated': '2026-09-19T00:00:00Z'
+          },
+          {
+            'name': 'Mock Traffic Provider (Demo)',
+            'type': 'Traffic [mock]',
+            'lastUpdated': '2026-09-19T00:00:00Z'
+          }
+        ],
+        'estimatedDuration': 'PT35M',
+        'distanceKm': 34.0,
+        'traffic': {
+          'status': 'mock',
+          'condition': 'clear',
+          'congestionLevel': 'free_flow',
+          'delaySeconds': 0.0,
+          'staticDuration': 'PT35M',
+          'trafficAwareDuration': 'PT35M',
+          'timestamp': '2026-09-19T00:00:00Z',
+          'sourceName': 'Mock Traffic Provider (Demo)',
+          'provenance': 'demo/mock'
+        },
+        'routes': []
+      };
+
+      final response = TripResponse.fromJson(json);
+      expect(response.status, TripStatus.success);
+      expect(response.sources.length, 4);
+
+      final weatherSource = response.sources.firstWhere((s) => s.name == 'Open-Meteo API');
+      expect(weatherSource.type, 'Weather (Primary)');
+      expect(weatherSource.name, 'Open-Meteo API');
+      // Verify no fake authoritative government claim
+      expect(weatherSource.type.contains('Authoritative'), isFalse);
+
+      final trafficSource = response.sources.firstWhere((s) => s.name.contains('Mock Traffic'));
+      expect(trafficSource.type, 'Traffic [mock]');
+
+      final routingSource = response.sources.firstWhere((s) => s.name.contains('Routing'));
+      expect(routingSource.type, 'Routing [mock]');
+    });
   });
 }
+
 

@@ -26,6 +26,19 @@ Returns service status, version, and environment.
 
 The `status` field returns a `TripStatus` string enum (`success`, `routing_unavailable`, `weather_unavailable`, `degraded`). Clients must check `status` before assuming `risk` or `recommendation` are non-null.
 
+#### Data Sources & Provenance (`TripResponse.sources`)
+Every trip response contains a list of `DataSource` objects guaranteeing end-to-end provenance transparency:
+- `name`: str (e.g. `"Open-Meteo API"`, `"Google Routes API"`, `"Mock Traffic Provider (Demo)"`)
+- `type`: str (e.g. `"Weather (Primary)"`, `"Routing [unavailable]"`, `"Alerts [demo]"`, `"Traffic [mock]"`)
+- `lastUpdated`: ISO-8601 datetime
+
+**Strict Provenance Rules:**
+- `live ≠ mock`: Live status is never coupled with mock provenance.
+- `mock ≠ authoritative`: Mock alerts and routing are strictly isolated and prevented from triggering production emergency overrides.
+- `secondary ≠ authoritative`: Commercial feeds (WeatherAPI, Open-Meteo) are never labeled as official government sources.
+- No Silent Failure: When routing or weather is unavailable, `TripStatus` explicitly degrades, risk is omitted (`null`), and the source is marked as `[unavailable]`.
+
+
 #### Traffic Intelligence (`TripResponse.traffic`)
 When traffic evaluation is active, the response includes a `traffic` object (`TrafficSnapshot`). If traffic data is absent, unavailable, or omitted, this field is `null` (100% backward compatible).
 

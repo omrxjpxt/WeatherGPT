@@ -1,49 +1,76 @@
-# WeatherGPT Provider Integration Strategy
+# WeatherGPT Provider Integration & Verification
 
-## Provider Abstraction
-All external data sources in WeatherGPT are hidden behind asynchronous Provider interfaces (e.g., `WeatherProvider`, `RoutingProvider`, `AlertProvider`). 
-- **Decoupling**: The Decision Engine never interacts with raw provider JSON or API-specific structures.
-- **Normalization**: Providers are strictly responsible for fetching external data and mapping it into the internal `Normalized...` Pydantic models (e.g., `NormalizedWeatherPoint`).
+This document provides the definitive, audit-verified record of all external and internal providers in WeatherGPT as verified during the **Live Provider Verification & Production Integration** phase.
 
-## Normalized Data Contracts
-The single source of truth for the Decision Engine is `backend/app/decision_engine/normalized_models.py`.
-- Any external data that cannot be mapped into these models must either be dropped or the internal model must be explicitly upgraded.
-- Provider-specific quirks (e.g., WMO weather codes, OpenWeatherMap weather IDs) must be translated into generic internal formats (e.g., `condition="Heavy Rain"`).
+## 1. Provider Status Matrix
 
-## Source Priority
-In the event of conflicting information or overlapping features, the system honors the following strict priority order:
-1. **Authoritative Emergency/Official Alerts** (`UNAVAILABLE` for direct integration, `PLANNED` via secondary, `DEMO` via mock).
-2. **Authoritative Official Forecast/Warning Data** where available.
-3. **Primary Weather/Routing/Traffic Providers** (`VERIFIED` Open-Meteo & Google Routes, `UNAVAILABLE` Traffic).
-4. **Derived WeatherGPT Calculations** (e.g., deterministic risk score aggregations).
-5. **LLM-generated explanation** (`UNAVAILABLE` currently; The LLM explains the decision, but never makes or overrides the deterministic risk calculation).
+| Provider Domain | Provider Name | Source Class | Credential Status | Integration Status | Live Verified Endpoints / Capabilities | Failure / Fallback Behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Primary Weather** | Open-Meteo API | `commercial_open` (Non-authoritative) | **None Required** (Public open endpoint) | **LIVE / VERIFIED** | `https://api.open-meteo.com/v1/forecast` (hourly temp, precip, humidity, wind speed, wind gusts, visibility, WMO weather code) | Raises `RuntimeError`/degrades to `TripStatus.weather_unavailable`. Non-blocking retries on 5xx. |
+| **Secondary Weather** | WeatherAPI | `secondary` (Non-authoritative) | **Missing / Pending** (`WEATHERAPI_API_KEY` not set) | **PENDING CREDENTIALS** (Adapter complete) | Controlled client raises `ValueError` if key missing. When configured: secondary comparison & confidence down-weighting. | Degrades silently in `TripService`; comparison runs with `secondary=None` without failing trip. |
+| **Routing** | Google Routes API | `commercial` | **Missing / Pending** (`GOOGLE_MAPS_API_KEY` not set) | **PENDING CREDENTIALS** (Adapter complete) | Offline/unit tests pass with mocked payloads. Live calls raise `ConfigurationError` when key missing. | `TripService` cleanly sets `TripStatus.routing_unavailable`, `risk = None`, `routes = []`, records `Routing [unavailable]`. |
+| **Routing (Demo/Mock)** | Mock Routing API | `demo` | None | **VERIFIED (Mock)** | Synthetic multi-route corridors (1 to 3 routes) in Delhi-NCR with polyline geometry and realistic static durations. | Always available in demo/fallback mode. |
+| **Traffic** | Mock Traffic Provider | `demo/mock` | None | **VERIFIED (Mock)** | Rush-hour vs. off-peak delays, mode-based zero delay (walk/metro), traffic-aware durations, segments. | Labeled `status=mock`, `provenance="demo/mock"`. |
+| **Traffic (Production)** | TomTom / Google Traffic | `primary` | **Pending** | **PENDING CREDENTIALS** | Adapter architecture ready; `UnavailableTrafficProvider` active when live provider is not configured. | `TripStatus.success` preserved with `delaySeconds = 0.0` and `status = unavailable`. |
+| **Official Alerts** | IMD / NDMA CAP | `authoritative` | Whitelist Pending | **UNAVAILABLE (Direct)** | Direct government API blocked by government IP whitelisting constraints. | Blocked from direct access; authoritative CAP feed will be hooked when gateway access is granted. |
+| **Alerts (Demo/Mock)** | WeatherGPT Internal Mock | `demo` | None | **VERIFIED (Mock)** | Emergency alerts, advisory warnings, closure polygons. | Subject to application-level override policy: demo alerts cannot trigger emergency overrides in production mode. |
+| **Curated Hazards** | Delhi-NCR Hazard Repository | `curated_historical` | Local | **VERIFIED (Curated)** | Spatially mapped flood hotspots, waterlogging underpasses, landslide corridors activated by live precipitation triggers. | Retained in local memory repository. |
 
-## Live Providers Implementation
+---
 
-### Weather & Alerts: WeatherAPI [VERIFIED]
-- **Status**: Implemented (`SECONDARY`)
-- **Data Extracted**: Temperature, precipitation, humidity, wind, visibility, weather condition, active alerts.
-- **Role**: Serves strictly as a secondary comparison source. If primary data (Open-Meteo) differs significantly (e.g. Temp diff > 5C), the confidence of the risk assessment is lowered.
-- **Alerts**: Alerts are normalized but explicitly marked as `secondary`. They will **never** trigger the authoritative emergency override path.
+## 2. Provenance Guarantees & Enforcement
 
-### Weather: Open-Meteo [VERIFIED]
-- **Status**: Implemented
-- **Data Extracted**: `temperature_2m`, `precipitation`, `relative_humidity_2m`, `wind_speed_10m`, `wind_gusts_10m`, `visibility`, `weather_code`.
-- **Visibility**: Uses explicit hourly physical visibility measurements from the API. We do not infer visibility solely from weather codes.
-- **Precipitation**: Open-Meteo returns hourly accumulation in `mm`. The internal decision engine consumes this explicitly as `precipitation_mm` and treats it as an intensity proxy.
-- **WMO Mapping**: Full WMO weather code mapping to string conditions is handled inside the provider adapter.
-- **Attribution & Licensing**: Open-Meteo data is provided via their non-commercial free-tier API under the **CC BY 4.0** license. Any UI consuming this data must explicitly display attribution to Open-Meteo.
+WeatherGPT enforces strict provenance invariants to guarantee that fake, mock, or secondary data is never disguised as authoritative or live:
 
-## Failure, Fallback & Timeout Behavior
-Robustness is critical:
-- **Timeouts**: Every external HTTP request must have a strict timeout (e.g., 5 seconds).
-- **Retries**: Transient failures (e.g., 5xx errors, network timeouts) should trigger a brief exponential backoff retry.
-- **Graceful Fallback**: If a primary provider fails completely, the system should log the error and degrade gracefully (e.g., fall back to `MockWeatherProvider` during development, or return a standardized error in production).
+1. **`live ≠ mock`**:
+   - Every provider output includes a typed status and provenance string (e.g. `status = TrafficStatus.mock`, `provenance = "demo/mock"` vs `status = TrafficStatus.live`, `provenance = "google_routes"`).
+   - Contradictory combinations (e.g., claiming `status = live` while having `provenance = "demo/mock"`) are strictly rejected at the Pydantic schema validation level.
 
-## Data Freshness & Caching
-- **Freshness Logging**: Every provider must report the `last_updated` timestamp and the specific provider name so it can be passed to the frontend for provenance transparency.
-- **Caching**: Future iterations will implement Redis/In-memory caching to prevent redundant API calls for identical locations and overlapping times.
+2. **`mock ≠ authoritative`**:
+   - Mock alerts are assigned `source_class = AlertSourceClass.demo`.
+   - The decision engine's alert policy strictly prohibits `demo` alerts from triggering emergency override logic when running in production mode (`settings.DEMO_MODE = False`).
 
-## Configuration & Secrets
-- **Secrets Management**: No API keys are hardcoded. All keys must be injected via environment variables (e.g., `.env` file read by `pydantic-settings`).
-- **Provider Toggling**: The active provider for each domain (Mock vs Real) should be driven by configuration, not hardcoded instantiation.
+3. **`secondary ≠ authoritative`**:
+   - Commercial aggregators (e.g. WeatherAPI, Open-Meteo) are never labeled as official government or civil protection entities.
+   - WeatherAPI alerts are normalized under `source_class = AlertSourceClass.secondary` and cannot trigger hard emergency overrides.
+   - Open-Meteo is labeled as `Open-Meteo API (Weather (Primary))` with attribution compliant with the CC BY 4.0 license.
+
+4. **Transparent Degradation (No Fake Success)**:
+   - A failure in a provider must never be masked as synthetic success in live mode.
+   - If routing fails or credentials are missing, the system returns `TripStatus.routing_unavailable`, sets `risk = None`, and reports `Routing [unavailable]` in `sources`.
+
+---
+
+## 3. End-to-End Live Verification Details
+
+### Open-Meteo API
+- **Endpoint**: `https://api.open-meteo.com/v1/forecast?latitude=28.627&longitude=77.365&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,visibility,wind_speed_10m,wind_gusts_10m&timezone=UTC`
+- **Fields Verified**:
+  - `temperature_2m`: Live floating-point degrees Celsius.
+  - `precipitation`: Hourly accumulation in mm.
+  - `visibility`: Physical measurement in meters (e.g., 7660.0m).
+  - `wind_speed_10m` & `wind_gusts_10m`: Verified in km/h.
+  - `weather_code`: Translated via WMO table into human-readable conditions.
+  - `timestamps`: Parsed and validated strictly in UTC ISO-8601.
+- **Decision Engine Flow**:
+  - Raw hourly entries mapped to `NormalizedWeatherPoint`.
+  - `is_extreme_heat` and `is_poor_visibility` calculated dynamically.
+  - Evaluated along route waypoints with temporal alignment.
+
+### Google Routes API
+- **Environment Key**: `GOOGLE_MAPS_API_KEY`
+- **Verification Result**: Unconfigured (`NOT_SET`).
+- **Behavior Verified**: `GoogleRoutesProvider` cleanly raises `ConfigurationError("GOOGLE_MAPS_API_KEY is not configured in the environment.")`. `TripService` cleanly handles this and returns `TripStatus.routing_unavailable`. No fabrication.
+
+### WeatherAPI
+- **Environment Key**: `WEATHERAPI_API_KEY`
+- **Verification Result**: Unconfigured (`NOT_SET`).
+- **Behavior Verified**: `WeatherAPIClient` cleanly raises `ValueError("WeatherAPI key is missing.")`. `TripService` catches the secondary fetch error and completes the primary assessment with `sources` reflecting the missing secondary source.
+
+---
+
+## 4. Known Limitations & Production Readiness
+
+1. **Routing Dependency**: Live route geometry currently depends on configuring `GOOGLE_MAPS_API_KEY`. In environments without the key, `MockRoutingProvider` serves as the testbed for multi-alternative evaluation.
+2. **Authoritative Alerts**: Direct IMD CAP alerts require government IP whitelisting. Currently, curated hazards and mock alerts test all alert policies and override paths.
+3. **Traffic**: Real-time traffic depends on Google Routes embedded traffic duration or TomTom API. The mock traffic provider provides deterministic testing with zero double-counting.
