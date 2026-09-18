@@ -14,7 +14,8 @@
 | **Google Maps** | Routing | Secondary | ✅ Complete `[VERIFIED]` | Offline routes implementation complete. |
 | **Mapbox** | Routing | Secondary | ❌ Discarded | Discarded in favor of Google Maps integration. |
 | **Mock Routing** | Routing | Demo | ✅ Complete `[DEMO]` | Used for fallback/demo transit paths. |
-| **TomTom/Google** | Traffic | Primary | ⏳ Pending | Awaiting API Key/finalization. |
+| **Mock Traffic** | Traffic | Demo | ✅ Complete `[VERIFIED]` | Strictly deterministic mock provider with explicit demo/mock provenance. Free-flow on walk/metro, rush-hour delay for motorized modes. |
+| **TomTom/Google** | Traffic | Primary | ⏳ Planned | Live provider interface ready; awaiting verified production API credentials. |
 | **Gemini/Grok** | LLM | Context | ⏳ Pending | Not yet connected. |
 
 ## Phase 1–5: Complete
@@ -47,7 +48,7 @@
   - **PLANNED**: Secondary Commercial Alert Provider (WeatherAPI).
   - **UNAVAILABLE**: Traffic, LLM, live direct IMD CAP feed.
 - **Endpoints**: Health, Trips, Scenarios, Weather, Alerts, Assistant endpoints implemented.
-- **Testing**: Exhaustive unit tests (47 total, all passing) covering engine determinism, spatial matching, routing, hazards, and alert override policy logic.
+- **Testing**: Exhaustive unit tests covering engine determinism, spatial matching, routing, hazards, and alert override policy logic.
 
 ## Phase 12: Flutter ↔ FastAPI Integration
 - 🟢 `TripStatus` implemented for graceful degradation (routing/weather failures don't produce `100` risk score)
@@ -58,10 +59,22 @@
 - **Mock/Live Toggle**: Added conditional provider resolution allowing fallback to offline Mock data when backend is down/unavailable.
 - **Data Models**: Successfully bridged Python/Pydantic `camelCase` responses to Dart domain models with `fromJson` serializers. Confirmed Qualitative Confidence UI updates.
 
+## Phase 13: Traffic Intelligence (Complete)
+- 🟢 **Provider Layer**: Created abstract `TrafficProvider` with `MockTrafficProvider` (strictly deterministic, labeled `status=mock`, `provenance="demo/mock"`), `UnavailableTrafficProvider`, and `FallbackTrafficProvider`.
+- 🟢 **Decoupled Route Architecture**: Traffic state is logically separate from base `NormalizedRouteSegment`, ensuring route geometry and baseline timings can succeed independently.
+- 🟢 **Duration Invariant & No Double Counting**: Enforces `trafficAwareDuration = staticDuration + trafficDelay`. Delay is counted and applied exactly once across the pipeline.
+- 🟢 **Three Distinct Traffic Effects**:
+  1. *Temporal Exposure Shift*: Segment delays shift downstream arrival times (`temporal_alignment.py`), ensuring weather is evaluated at actual arrival times.
+  2. *Extended Environmental Exposure*: Extra duration spent under adverse conditions scales segment risk (`risk_model.py`).
+  3. *Direct Congestion Risk Factor*: Severe or heavy congestion on motorized modes adds a dedicated `Traffic Congestion` factor to the assessment.
+- 🟢 **100% Backward Compatibility**: `traffic` payload on `TripResponse` is optional/nullable; legacy responses deserialize seamlessly.
+- 🟢 **Flutter UI**: Trip Analysis screen renders the Traffic Conditions card with congestion badge, current travel time, free-flow time, delay pill, and data source provenance with graceful fallback for unavailable traffic.
+- 🟢 **Test Verification**: 59/59 backend pytest suite passing, 27/27 Flutter test suite passing, 0 issues on `flutter analyze`.
+
 ## Currently Pending
-- Visual layout refinement on iOS simulator (specifically Home screen clipping issues).
-- Connect production APIs upon user approval (TomTom/Traffic, Gemini, Firestore).
+- Connect production APIs upon user approval (verified Google Maps Traffic / TomTom, Gemini, Firestore).
+- iOS visual QA on physical device.
 
 ## Next Steps
-- Verify visual fidelity on an iOS simulator.
-- Connect production APIs upon user approval.
+- Implement LLM Context / Assistant provider when credentials and scope are approved.
+- Connect production Firestore when persistence phase begins.

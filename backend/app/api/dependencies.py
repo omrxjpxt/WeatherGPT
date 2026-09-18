@@ -10,6 +10,7 @@ from app.providers.llm.mock import MockLLMProvider
 
 from app.providers.weather.base import WeatherProvider
 from app.providers.alerts.base import AlertProvider
+from app.providers.traffic.base import TrafficProvider
 from app.services.trip_service import TripService
 from app.services.scenario_service import ScenarioService
 from app.services.assistant_service import AssistantService
@@ -43,6 +44,7 @@ trip_service = TripService(
     weather_provider=weather_provider, 
     routing_provider=routing_provider, 
     alert_provider=alert_provider,
+    traffic_provider=traffic_provider,
     hazard_repository=hazard_repository
 )
 scenario_service = ScenarioService(trip_service)
@@ -62,3 +64,6 @@ def get_weather_provider() -> WeatherProvider:
 
 def get_alert_provider() -> AlertProvider:
     return alert_provider
+
+def get_traffic_provider() -> TrafficProvider:
+    return traffic_provider

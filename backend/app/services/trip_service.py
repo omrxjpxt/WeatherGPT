@@ -10,6 +10,8 @@ from app.providers.weather.base import WeatherProvider
 from app.providers.routing.base import RoutingProvider
 from app.providers.routing.mock import MockRoutingProvider
 from app.providers.alerts.base import AlertProvider
+from app.providers.traffic.base import TrafficProvider
+from app.providers.traffic.fallback import UnavailableTrafficProvider
 from app.models.hazard import Hazard
 from app.models.enums import RiskLevel
 
@@ -19,6 +21,7 @@ class TripService:
         weather_provider: WeatherProvider,
         routing_provider: RoutingProvider,
         alert_provider: AlertProvider,
+        traffic_provider: Optional[TrafficProvider] = None,
         secondary_weather_provider: Optional[WeatherProvider] = None,
         secondary_alert_provider: Optional[AlertProvider] = None,
         hazard_repository: Optional['app.repositories.hazard_repository.HazardRepository'] = None,
@@ -26,6 +29,7 @@ class TripService:
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
         self.alert_provider = alert_provider
+        self.traffic_provider = traffic_provider or UnavailableTrafficProvider()
         self.secondary_weather_provider = secondary_weather_provider
         self.secondary_alert_provider = secondary_alert_provider
         self.hazard_repository = hazard_repository
@@ -185,6 +189,28 @@ class TripService:
                 import logging
                 logging.getLogger(__name__).error(f"Hazard repository failed: {e}")
                 hazards = []
+
+        # 1.5 Fetch Traffic Data
+        traffic = None
+        try:
+            traffic = await self.traffic_provider.get_traffic_for_route(route, request.departure_time, request.mode)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Traffic provider failed: {e}")
+            from app.models.enums import TrafficStatus, TrafficCondition, CongestionLevel
+            from app.models.traffic import TrafficSnapshot
+            traffic = TrafficSnapshot(
+                status=TrafficStatus.unavailable,
+                condition=TrafficCondition.unknown,
+                congestion_level=CongestionLevel.unknown,
+                delay_seconds=0.0,
+                static_duration=route.total_duration,
+                traffic_aware_duration=route.total_duration,
+                timestamp=datetime.now(timezone.utc),
+                source_name=self.traffic_provider.provider_name,
+                provenance="unavailable"
+            )
+
         # 2. Build Context
         ctx = TripContext(
             origin=request.origin,
@@ -195,7 +221,8 @@ class TripService:
             weather_timeline=comparison.primary_timeline,
             hazards=hazards,
             alerts=alerts,
-            agreement_status=comparison.agreement_status.value
+            agreement_status=comparison.agreement_status.value,
+            traffic=traffic
         )
         
         # 3. Evaluate Engine
@@ -209,6 +236,10 @@ class TripService:
             DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
             DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
         ]
+
+        if traffic:
+            traffic_status_str = traffic.status.value if hasattr(traffic.status, "value") else str(traffic.status)
+            sources.append(DataSource(name=traffic.source_name, type=f"Traffic [{traffic_status_str}]", last_updated=traffic.timestamp))
         
         if self.secondary_weather_provider and comparison.secondary_timeline:
             sources.append(DataSource(name=self.secondary_weather_provider.provider_name, type="Weather (Secondary)", last_updated=datetime.now(timezone.utc)))
@@ -243,5 +274,6 @@ class TripService:
             ],
             sources=sources,
             estimated_duration=result.total_duration,
-            distance_km=result.total_distance_km
+            distance_km=result.total_distance_km,
+            traffic=traffic
         )

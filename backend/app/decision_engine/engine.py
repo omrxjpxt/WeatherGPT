@@ -44,7 +44,8 @@ class DecisionEngine:
                 weather_timeline=ctx.weather_timeline,
                 hazards=ctx.hazards,
                 alerts=ctx.alerts,
-                arrival_deadline=ctx.arrival_deadline
+                arrival_deadline=ctx.arrival_deadline,
+                traffic=ctx.traffic
             )
             # We don't want the core evaluation to recurse
             try:
@@ -63,22 +64,35 @@ class DecisionEngine:
         
 
     def _evaluate_core(self, ctx: TripContext) -> EngineDecisionResult:
-        # 1. Temporal Alignment
-        aligned = align_route_with_weather(ctx.route, ctx.departure_time, ctx.weather_timeline)
+        # 1. Temporal Alignment (accounts for traffic delay in passage time: Effect 1)
+        aligned = align_route_with_weather(ctx.route, ctx.departure_time, ctx.weather_timeline, ctx.traffic)
         
-        # 2. Risk Calculation per segment
+        # 2. Risk Calculation per segment (accounts for traffic delay in exposure: Effect 2)
         segment_risks = []
         route_segments_with_weather = []
         all_factors_dict = {}
         hazard_relevance_dict = {}
         max_risk_score = 0
         
+        traffic_segments = ctx.traffic.segments if (ctx.traffic and ctx.traffic.segments) else []
+        seg_durations = []
+        
         for idx, (seg, arrival_time, weather) in enumerate(aligned):
+            seg_delay_sec = 0.0
+            if idx < len(traffic_segments):
+                seg_delay_sec = max(0.0, traffic_segments[idx].delay_seconds)
+            elif ctx.traffic and ctx.traffic.delay_seconds > 0 and len(aligned) > 0:
+                seg_delay_sec = max(0.0, ctx.traffic.delay_seconds / len(aligned))
+
+            effective_sec = seg.estimated_duration.total_seconds() + seg_delay_sec
+            seg_durations.append(effective_sec)
+
             score, level, factors, reason, relevance_results = calculate_segment_risk(
                 segment=seg,
                 weather=weather,
                 hazards=ctx.hazards,
-                mode=ctx.mode
+                mode=ctx.mode,
+                traffic_delay_seconds=seg_delay_sec
             )
             
             segment_risks.append(SegmentRisk(
@@ -117,13 +131,33 @@ class DecisionEngine:
                 existing = hazard_relevance_dict.get(hr.hazard_id)
                 if not existing or hr.contribution_score > existing.contribution_score:
                     hazard_relevance_dict[hr.hazard_id] = hr
+
+        # Effect 3: Direct Congestion Risk Factor (motorized modes with heavy/severe congestion)
+        if ctx.traffic and ctx.mode in (TransportMode.bike, TransportMode.car):
+            from app.models.enums import CongestionLevel
+            if ctx.traffic.congestion_level == CongestionLevel.severe:
+                all_factors_dict["Traffic Congestion"] = RiskFactor(
+                    name="Traffic Congestion",
+                    description=f"Severe traffic congestion with +{int(ctx.traffic.delay_seconds // 60)} min delay.",
+                    score=40,
+                    level=RiskLevel.high,
+                    weight=0.2
+                )
+            elif ctx.traffic.congestion_level == CongestionLevel.heavy:
+                all_factors_dict["Traffic Congestion"] = RiskFactor(
+                    name="Traffic Congestion",
+                    description=f"Heavy traffic congestion with +{int(ctx.traffic.delay_seconds // 60)} min delay.",
+                    score=25,
+                    level=RiskLevel.moderate,
+                    weight=0.2
+                )
                     
         # 3. Overall Risk aggregation
         bottleneck_score = max_risk_score
         
-        total_time = sum([seg.estimated_duration.total_seconds() for seg, _, _ in aligned])
+        total_time = sum(seg_durations)
         if total_time > 0:
-            weighted_sum = sum([r.risk_score * (seg.estimated_duration.total_seconds()) for r, (seg, _, _) in zip(segment_risks, aligned)])
+            weighted_sum = sum([r.risk_score * dur for r, dur in zip(segment_risks, seg_durations)])
             exposure_score = weighted_sum / total_time
         else:
             exposure_score = bottleneck_score

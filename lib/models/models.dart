@@ -38,6 +38,77 @@ enum TripStatus {
   }
 }
 
+enum CongestionLevel {
+  unknown,
+  freeFlow,
+  moderate,
+  heavy,
+  severe;
+
+  static CongestionLevel fromString(String? value) {
+    switch (value) {
+      case 'free_flow':
+      case 'freeFlow':
+        return CongestionLevel.freeFlow;
+      case 'moderate':
+        return CongestionLevel.moderate;
+      case 'heavy':
+        return CongestionLevel.heavy;
+      case 'severe':
+        return CongestionLevel.severe;
+      case 'unknown':
+      default:
+        return CongestionLevel.unknown;
+    }
+  }
+}
+
+enum TrafficStatus {
+  live,
+  cached,
+  mock,
+  unavailable;
+
+  static TrafficStatus fromString(String? value) {
+    switch (value) {
+      case 'live':
+        return TrafficStatus.live;
+      case 'cached':
+        return TrafficStatus.cached;
+      case 'mock':
+        return TrafficStatus.mock;
+      case 'unavailable':
+      default:
+        return TrafficStatus.unavailable;
+    }
+  }
+}
+
+enum TrafficCondition {
+  clear,
+  congested,
+  stopAndGo,
+  gridlock,
+  unknown;
+
+  static TrafficCondition fromString(String? value) {
+    switch (value) {
+      case 'clear':
+        return TrafficCondition.clear;
+      case 'congested':
+        return TrafficCondition.congested;
+      case 'stop_and_go':
+      case 'stopAndGo':
+        return TrafficCondition.stopAndGo;
+      case 'gridlock':
+        return TrafficCondition.gridlock;
+      case 'unknown':
+      default:
+        return TrafficCondition.unknown;
+    }
+  }
+}
+
 // ── Core Models ──
 
 class TripRequest {
@@ -82,6 +153,117 @@ class TripRequest {
       );
 }
 
+class TrafficSegment {
+  final double startLat;
+  final double startLng;
+  final double endLat;
+  final double endLng;
+  final CongestionLevel congestionLevel;
+  final double delaySeconds;
+  final double? currentSpeedKmh;
+  final double? freeFlowSpeedKmh;
+
+  const TrafficSegment({
+    required this.startLat,
+    required this.startLng,
+    required this.endLat,
+    required this.endLng,
+    this.congestionLevel = CongestionLevel.unknown,
+    this.delaySeconds = 0.0,
+    this.currentSpeedKmh,
+    this.freeFlowSpeedKmh,
+  });
+
+  factory TrafficSegment.fromJson(Map<String, dynamic> json) => TrafficSegment(
+        startLat: (json['startLat'] as num).toDouble(),
+        startLng: (json['startLng'] as num).toDouble(),
+        endLat: (json['endLat'] as num).toDouble(),
+        endLng: (json['endLng'] as num).toDouble(),
+        congestionLevel: CongestionLevel.fromString(json['congestionLevel'] as String?),
+        delaySeconds: (json['delaySeconds'] as num?)?.toDouble() ?? 0.0,
+        currentSpeedKmh: (json['currentSpeedKmh'] as num?)?.toDouble(),
+        freeFlowSpeedKmh: (json['freeFlowSpeedKmh'] as num?)?.toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'startLat': startLat,
+        'startLng': startLng,
+        'endLat': endLat,
+        'endLng': endLng,
+        'congestionLevel': congestionLevel.name,
+        'delaySeconds': delaySeconds,
+        'currentSpeedKmh': currentSpeedKmh,
+        'freeFlowSpeedKmh': freeFlowSpeedKmh,
+      };
+}
+
+class TrafficSnapshot {
+  final TrafficStatus status;
+  final TrafficCondition condition;
+  final CongestionLevel congestionLevel;
+  final double delaySeconds;
+  final Duration staticDuration;
+  final Duration trafficAwareDuration;
+  final double? currentSpeedKmh;
+  final double? freeFlowSpeedKmh;
+  final List<TrafficSegment> segments;
+  final DateTime timestamp;
+  final String sourceName;
+  final String provenance;
+
+  const TrafficSnapshot({
+    required this.status,
+    required this.condition,
+    required this.congestionLevel,
+    required this.delaySeconds,
+    required this.staticDuration,
+    required this.trafficAwareDuration,
+    this.currentSpeedKmh,
+    this.freeFlowSpeedKmh,
+    this.segments = const [],
+    required this.timestamp,
+    required this.sourceName,
+    required this.provenance,
+  });
+
+  Duration get trafficDelay => Duration(seconds: delaySeconds.round());
+
+  factory TrafficSnapshot.fromJson(Map<String, dynamic> json) => TrafficSnapshot(
+        status: TrafficStatus.fromString(json['status'] as String?),
+        condition: TrafficCondition.fromString(json['condition'] as String?),
+        congestionLevel: CongestionLevel.fromString(json['congestionLevel'] as String?),
+        delaySeconds: (json['delaySeconds'] as num?)?.toDouble() ?? 0.0,
+        staticDuration: _parseDuration(json['staticDuration']?.toString() ?? '0'),
+        trafficAwareDuration: _parseDuration(json['trafficAwareDuration']?.toString() ?? '0'),
+        currentSpeedKmh: (json['currentSpeedKmh'] as num?)?.toDouble(),
+        freeFlowSpeedKmh: (json['freeFlowSpeedKmh'] as num?)?.toDouble(),
+        segments: (json['segments'] as List?)
+                ?.map((e) => TrafficSegment.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+        timestamp: json['timestamp'] != null
+            ? DateTime.parse(json['timestamp'] as String).toLocal()
+            : DateTime.now(),
+        sourceName: json['sourceName'] as String? ?? 'Traffic Provider',
+        provenance: json['provenance'] as String? ?? 'unknown',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'status': status.name,
+        'condition': condition.name,
+        'congestionLevel': congestionLevel.name,
+        'delaySeconds': delaySeconds,
+        'staticDuration': staticDuration.inSeconds.toString(),
+        'trafficAwareDuration': trafficAwareDuration.inSeconds.toString(),
+        'currentSpeedKmh': currentSpeedKmh,
+        'freeFlowSpeedKmh': freeFlowSpeedKmh,
+        'segments': segments.map((e) => e.toJson()).toList(),
+        'timestamp': timestamp.toUtc().toIso8601String(),
+        'sourceName': sourceName,
+        'provenance': provenance,
+      };
+}
+
 class TripResponse {
   final String? analysisId;
   final TripStatus status;
@@ -94,6 +276,7 @@ class TripResponse {
   final List<DataSource> sources;
   final Duration estimatedDuration;
   final double distanceKm;
+  final TrafficSnapshot? traffic;
 
   TripResponse({
     this.analysisId,
@@ -107,6 +290,7 @@ class TripResponse {
     required this.sources,
     required this.estimatedDuration,
     required this.distanceKm,
+    this.traffic,
   });
 
   factory TripResponse.fromJson(Map<String, dynamic> json) {
@@ -122,6 +306,9 @@ class TripResponse {
       sources: (json['sources'] as List).map((e) => DataSource.fromJson(e as Map<String, dynamic>)).toList(),
       estimatedDuration: _parseDuration(json['estimatedDuration'] as String),
       distanceKm: (json['distanceKm'] as num).toDouble(),
+      traffic: json['traffic'] != null
+          ? TrafficSnapshot.fromJson(json['traffic'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -138,6 +325,7 @@ class TripResponse {
       'sources': sources.map((e) => e.toJson()).toList(),
       'estimatedDuration': estimatedDuration.inSeconds.toString(),
       'distanceKm': distanceKm,
+      'traffic': traffic?.toJson(),
     };
   }
 }

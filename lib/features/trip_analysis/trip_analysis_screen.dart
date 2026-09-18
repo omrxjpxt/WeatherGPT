@@ -96,7 +96,7 @@ class _TripAnalysisBody extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${trip.distanceKm} km • ${trip.estimatedDuration.inMinutes} min • ${_modeLabel(trip.request.mode)}',
+                                '${trip.distanceKm} km • ${trip.traffic != null && trip.traffic!.status != TrafficStatus.unavailable ? '${trip.traffic!.trafficAwareDuration.inMinutes} min' : '${trip.estimatedDuration.inMinutes} min'} • ${_modeLabel(trip.request.mode)}',
                                 style: AppTypography.bodySm.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
@@ -127,6 +127,10 @@ class _TripAnalysisBody extends StatelessWidget {
               // Risk summary card
               _buildRiskCard(context, trip),
               const SizedBox(height: Spacing.stackMd),
+
+              // Traffic conditions card
+              _buildTrafficCard(context, trip),
+              const SizedBox(height: Spacing.stackLg),
 
               // Route segments
               const SectionTitle(title: 'Route Segments'),
@@ -222,6 +226,179 @@ class _TripAnalysisBody extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildTrafficCard(BuildContext context, TripResponse trip) {
+    final traffic = trip.traffic;
+    final isAvailable = traffic != null && traffic.status != TrafficStatus.unavailable;
+
+    if (!isAvailable) {
+      return WeatherCard(
+        backgroundColor: AppColors.surfaceContainerLow,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(Radii.base),
+              ),
+              child: const Icon(
+                CupertinoIcons.car_detailed,
+                color: AppColors.onSurfaceVariant,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Traffic Data Unavailable',
+                    style: AppTypography.labelMd.copyWith(
+                      color: AppColors.primaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Trip evaluated using base routing (${trip.estimatedDuration.inMinutes} min static duration). No traffic delay applied.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final delayMins = traffic.trafficDelay.inMinutes;
+    final delayText = delayMins > 0 ? '+$delayMins min' : 'No delay';
+    final delayColor = delayMins > 10
+        ? AppColors.riskHigh
+        : (delayMins > 0 ? AppColors.sunriseAmber : AppColors.riskLow);
+
+    return WeatherCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: delayColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(Radii.base),
+                ),
+                child: Icon(
+                  CupertinoIcons.car_detailed,
+                  color: delayColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TRAFFIC CONDITIONS',
+                      style: AppTypography.labelCaps.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      _congestionLabel(traffic.congestionLevel),
+                      style: AppTypography.headlineMd.copyWith(
+                        color: AppColors.primaryText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: delayColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(Radii.full),
+                  border: Border.all(color: delayColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  delayText,
+                  style: AppTypography.labelMd.copyWith(
+                    color: delayColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Spacing.stackMd),
+          const Divider(),
+          const SizedBox(height: Spacing.stackSm),
+
+          // Duration metrics: static vs traffic-aware vs delay
+          Row(
+            children: [
+              Expanded(
+                child: _TrafficMetric(
+                  label: 'CURRENT TIME',
+                  value: '${traffic.trafficAwareDuration.inMinutes} min',
+                  color: AppColors.primaryText,
+                ),
+              ),
+              Expanded(
+                child: _TrafficMetric(
+                  label: 'FREE-FLOW',
+                  value: '${traffic.staticDuration.inMinutes} min',
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              Expanded(
+                child: _TrafficMetric(
+                  label: 'EST. DELAY',
+                  value: delayText,
+                  color: delayColor,
+                ),
+              ),
+            ],
+          ),
+
+          if (traffic.currentSpeedKmh != null && traffic.freeFlowSpeedKmh != null) ...[
+            const SizedBox(height: Spacing.stackSm),
+            Text(
+              'Avg Speed: ${traffic.currentSpeedKmh!.round()} km/h (free-flow: ${traffic.freeFlowSpeedKmh!.round()} km/h)',
+              style: AppTypography.bodySm.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: Spacing.stackSm),
+          Text(
+            'Source: ${traffic.sourceName} • ${traffic.provenance}',
+            style: AppTypography.labelCaps.copyWith(
+              color: AppColors.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _congestionLabel(CongestionLevel level) => switch (level) {
+    CongestionLevel.freeFlow => 'Free Flow',
+    CongestionLevel.moderate => 'Moderate Traffic',
+    CongestionLevel.heavy => 'Heavy Congestion',
+    CongestionLevel.severe => 'Severe Congestion',
+    CongestionLevel.unknown => 'Unknown Conditions',
+  };
 
   Widget _buildSegmentRow(RouteSegment segment) {
     final color = _colorForRisk(segment.riskLevel);
@@ -561,6 +738,46 @@ class _ActionButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TrafficMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _TrafficMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: AppTypography.labelCaps.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 10,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: AppTypography.labelMd.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }

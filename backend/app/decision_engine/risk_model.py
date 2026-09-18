@@ -26,13 +26,14 @@ def calculate_segment_risk(
     segment: NormalizedRouteSegment,
     weather: NormalizedWeatherPoint,
     hazards: List[NormalizedHazard],
-    mode: TransportMode
+    mode: TransportMode,
+    traffic_delay_seconds: float = 0.0,
 ) -> Tuple[int, RiskLevel, List[RiskFactor], str, List[HazardRelevanceResult]]:
     """
     Calculates risk for a specific segment.
     Explicitly separates:
     - user exposure (mode_multiplier)
-    - temporal exposure (duration)
+    - temporal exposure (duration, including traffic delay)
     - route exposure (hazards on segment)
     - hazard severity (weather conditions)
     """
@@ -41,8 +42,9 @@ def calculate_segment_risk(
     # 1. User Exposure (Mode)
     mode_multiplier = get_mode_exposure_multiplier(mode)
     
-    # 2. Temporal Exposure (Duration relative to a base of 10 mins)
-    duration_mins = segment.estimated_duration.total_seconds() / 60.0
+    # 2. Temporal Exposure (Duration relative to a base of 10 mins, accounting for traffic delay)
+    effective_duration_seconds = segment.estimated_duration.total_seconds() + max(0.0, traffic_delay_seconds)
+    duration_mins = effective_duration_seconds / 60.0
     temporal_multiplier = min(2.0, max(0.5, duration_mins / 10.0))
     
     # 3. Hazard Severity (Weather)

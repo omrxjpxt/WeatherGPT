@@ -61,3 +61,23 @@ class AlertSourceClass(str, Enum):
     authoritative = "authoritative"
     secondary = "secondary"
     demo = "demo"
+
+class CongestionLevel(str, Enum):
+    unknown = "unknown"
+    free_flow = "free_flow"
+    moderate = "moderate"
+    heavy = "heavy"
+    severe = "severe"
+
+class TrafficStatus(str, Enum):
+    live = "live"
+    cached = "cached"
+    mock = "mock"
+    unavailable = "unavailable"
+
+class TrafficCondition(str, Enum):
+    clear = "clear"
+    congested = "congested"
+    stop_and_go = "stop_and_go"
+    gridlock = "gridlock"
+    unknown = "unknown"

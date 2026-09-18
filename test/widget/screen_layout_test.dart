@@ -124,6 +124,188 @@ void main() {
       expect(caughtDetails, isNull);
     });
 
+    testWidgets('Trip Analysis renders Traffic Intelligence card with delays and metrics on iPhone 15 Pro and SE', (tester) async {
+      final tripWithTraffic = TripResponse(
+        analysisId: 'traffic-test-1',
+        status: TripStatus.success,
+        request: TripRequest(
+          origin: 'Noida Sector 62',
+          destination: 'Gurgaon Cyber Hub',
+          departureTime: DateTime(2026, 8, 27, 8, 0),
+          mode: TransportMode.car,
+        ),
+        risk: const RiskAssessment(
+          overallScore: 42,
+          level: RiskLevel.moderate,
+          confidence: Confidence(level: ConfidenceLevel.high, explanation: 'Deterministic models'),
+          factors: [
+            RiskFactor(
+              name: 'Traffic Congestion',
+              description: 'Moderate rush hour delay',
+              score: 15,
+              level: RiskLevel.moderate,
+              weight: 0.15,
+            )
+          ],
+          summary: 'Moderate rush hour delay with clear skies.',
+        ),
+        route: const [
+          RouteSegment(
+            startLat: 28.5355,
+            startLng: 77.3910,
+            endLat: 28.4595,
+            endLng: 77.0266,
+            riskLevel: RiskLevel.moderate,
+            description: 'Take Noida-Greater Noida Expy',
+          ),
+        ],
+        recommendation: const Recommendation(
+          headline: 'Depart on schedule',
+          body: 'Congestion adds 12 min to your trip. No severe weather on route.',
+        ),
+        modeOptions: const [],
+        hazards: const [],
+        sources: [
+          DataSource(
+            name: 'Open-Meteo',
+            type: 'Weather',
+            lastUpdated: DateTime(2026, 8, 27, 8, 0),
+          ),
+          DataSource(
+            name: 'Mock Traffic Provider (Demo)',
+            type: 'Traffic [mock]',
+            lastUpdated: DateTime(2026, 8, 27, 8, 0),
+          ),
+        ],
+        estimatedDuration: const Duration(minutes: 50),
+        distanceKm: 38.0,
+        traffic: TrafficSnapshot(
+          status: TrafficStatus.mock,
+          condition: TrafficCondition.congested,
+          congestionLevel: CongestionLevel.moderate,
+          delaySeconds: 720.0,
+          staticDuration: const Duration(minutes: 50),
+          trafficAwareDuration: const Duration(minutes: 62),
+          currentSpeedKmh: 35.0,
+          freeFlowSpeedKmh: 45.0,
+          segments: const [],
+          timestamp: DateTime(2026, 8, 27, 8, 0),
+          sourceName: 'Mock Traffic Provider (Demo)',
+          provenance: 'demo/mock',
+        ),
+      );
+
+      // iPhone 15 Pro
+      await tester.binding.setSurfaceSize(const Size(393, 852));
+      await tester.pumpWidget(_buildTestApp(
+        screen: const TripAnalysisScreen(),
+        overrides: [
+          tripResponseProvider.overrideWith((ref) => Future.value(tripWithTraffic)),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TRAFFIC CONDITIONS'), findsOneWidget);
+      expect(find.text('CURRENT TIME'), findsOneWidget);
+      expect(find.text('FREE-FLOW'), findsOneWidget);
+      expect(find.text('EST. DELAY'), findsOneWidget);
+      expect(find.text('+12 min'), findsWidgets);
+      expect(find.text('Moderate Traffic'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // iPhone SE
+      await tester.binding.setSurfaceSize(const Size(375, 667));
+      await tester.pumpWidget(_buildTestApp(
+        screen: const TripAnalysisScreen(),
+        size: const Size(375, 667),
+        padding: const EdgeInsets.only(top: 20, bottom: 0),
+        overrides: [
+          tripResponseProvider.overrideWith((ref) => Future.value(tripWithTraffic)),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Trip Analysis renders degraded traffic banner when traffic is unavailable', (tester) async {
+      final tripWithUnavailableTraffic = TripResponse(
+        analysisId: 'traffic-unavail-1',
+        status: TripStatus.success,
+        request: TripRequest(
+          origin: 'Noida Sector 62',
+          destination: 'Gurgaon Cyber Hub',
+          departureTime: DateTime(2026, 8, 27, 8, 0),
+          mode: TransportMode.car,
+        ),
+        risk: const RiskAssessment(
+          overallScore: 20,
+          level: RiskLevel.low,
+          confidence: Confidence(level: ConfidenceLevel.high, explanation: 'Clear skies'),
+          factors: [],
+          summary: 'Low risk trip.',
+        ),
+        route: const [
+          RouteSegment(
+            startLat: 28.5355,
+            startLng: 77.3910,
+            endLat: 28.4595,
+            endLng: 77.0266,
+            riskLevel: RiskLevel.low,
+            description: 'Take Noida-Greater Noida Expy',
+          ),
+        ],
+        recommendation: const Recommendation(
+          headline: 'Good to go',
+          body: 'Weather conditions are optimal.',
+        ),
+        modeOptions: const [],
+        hazards: const [],
+        sources: [
+          DataSource(
+            name: 'Unavailable Traffic Provider',
+            type: 'Traffic [unavailable]',
+            lastUpdated: DateTime(2026, 8, 27, 8, 0),
+          ),
+        ],
+        estimatedDuration: const Duration(minutes: 50),
+        distanceKm: 38.0,
+        traffic: TrafficSnapshot(
+          status: TrafficStatus.unavailable,
+          condition: TrafficCondition.unknown,
+          congestionLevel: CongestionLevel.unknown,
+          delaySeconds: 0.0,
+          staticDuration: const Duration(minutes: 50),
+          trafficAwareDuration: const Duration(minutes: 50),
+          segments: const [],
+          timestamp: DateTime(2026, 8, 27, 8, 0),
+          sourceName: 'Unavailable Traffic Provider',
+          provenance: 'unavailable',
+        ),
+      );
+
+      await tester.binding.setSurfaceSize(const Size(393, 852));
+      await tester.pumpWidget(_buildTestApp(
+        screen: const TripAnalysisScreen(),
+        overrides: [
+          tripResponseProvider.overrideWith((ref) => Future.value(tripWithUnavailableTraffic)),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Traffic Data Unavailable'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('What-If Screen renders correctly without overflow on iPhone SE', (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 667));
       await tester.pumpWidget(_buildTestApp(

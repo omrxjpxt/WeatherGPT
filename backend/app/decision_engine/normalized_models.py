@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.models.enums import TransportMode, HazardType, HazardSourceClass, AlertSeverity, AlertSourceClass
+from app.models.traffic import TrafficSnapshot
 
 class NormalizedWeatherPoint(BaseModel):
     time: datetime
@@ -84,3 +85,4 @@ class TripContext(BaseModel):
     alerts: List[NormalizedAlert]
     arrival_deadline: Optional[datetime] = None
     agreement_status: str = "high"
+    traffic: Optional[TrafficSnapshot] = None

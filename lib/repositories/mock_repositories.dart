@@ -21,6 +21,7 @@ class MockTripRepository implements TripRepository {
       sources: _buildSources(),
       estimatedDuration: _etaForMode(request.mode),
       distanceKm: request.mode == TransportMode.metro ? 42.0 : 35.5,
+      traffic: _buildMockTraffic(request.mode, _etaForMode(request.mode)),
     );
   }
 
@@ -277,11 +278,46 @@ class MockTripRepository implements TripRepository {
         lastUpdated: DateTime(2026, 8, 27, 7, 0),
       ),
       DataSource(
-        name: 'Google Maps Traffic',
-        type: 'Traffic API',
+        name: 'Mock Traffic Provider (Demo)',
+        type: 'Traffic [mock]',
         lastUpdated: DateTime(2026, 8, 27, 7, 55),
       ),
     ];
+  }
+
+  TrafficSnapshot _buildMockTraffic(TransportMode mode, Duration staticDuration) {
+    if (mode == TransportMode.walk || mode == TransportMode.metro) {
+      return TrafficSnapshot(
+        status: TrafficStatus.mock,
+        condition: TrafficCondition.clear,
+        congestionLevel: CongestionLevel.freeFlow,
+        delaySeconds: 0.0,
+        staticDuration: staticDuration,
+        trafficAwareDuration: staticDuration,
+        currentSpeedKmh: mode == TransportMode.walk ? 5.0 : 35.0,
+        freeFlowSpeedKmh: mode == TransportMode.walk ? 5.0 : 35.0,
+        timestamp: DateTime(2026, 8, 27, 8, 0),
+        sourceName: 'Mock Traffic Provider (Demo)',
+        provenance: 'demo/mock',
+      );
+    }
+    
+    // For car/bike in morning rush hour: +14 min traffic delay
+    final delay = const Duration(minutes: 14);
+    final trafficAware = staticDuration + delay;
+    return TrafficSnapshot(
+      status: TrafficStatus.mock,
+      condition: TrafficCondition.congested,
+      congestionLevel: CongestionLevel.heavy,
+      delaySeconds: delay.inSeconds.toDouble(),
+      staticDuration: staticDuration,
+      trafficAwareDuration: trafficAware,
+      currentSpeedKmh: 31.5,
+      freeFlowSpeedKmh: 42.0,
+      timestamp: DateTime(2026, 8, 27, 8, 0),
+      sourceName: 'Mock Traffic Provider (Demo)',
+      provenance: 'demo/mock',
+    );
   }
 
   Duration _etaForMode(TransportMode mode) {

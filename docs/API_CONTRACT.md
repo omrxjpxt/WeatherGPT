@@ -22,9 +22,36 @@ Returns service status, version, and environment.
 ### 2. Trips
 `POST /trips/analyze`
 **Request:** `TripRequest` (origin, destination, departure_time, mode)
-**Response:** `TripResponse` (analysis_id, status, request, risk (optional), route, recommendation (optional), mode_options, hazards, sources, estimated_duration, distance_km)
+**Response:** `TripResponse` (analysis_id, status, request, risk (optional), route, recommendation (optional), mode_options, hazards, sources, estimated_duration, distance_km, traffic (optional))
 
 The `status` field returns a `TripStatus` string enum (`success`, `routing_unavailable`, `weather_unavailable`, `degraded`). Clients must check `status` before assuming `risk` or `recommendation` are non-null.
+
+#### Traffic Intelligence (`TripResponse.traffic`)
+When traffic evaluation is active, the response includes a `traffic` object (`TrafficSnapshot`). If traffic data is absent, unavailable, or omitted, this field is `null` (100% backward compatible).
+
+**Model: `TrafficSnapshot`**
+- `status`: `mock` | `live` | `unavailable` | `cached`
+- `condition`: `clear` | `congested` | `stop_and_go` | `gridlock` | `unknown`
+- `congestionLevel`: `free_flow` | `moderate` | `heavy` | `severe` | `unknown`
+- `delaySeconds`: float (Traffic delay in seconds; 0.0 for zero delay / walk / metro)
+- `staticDuration`: ISO-8601 duration string (Free-flow baseline duration, e.g. `PT50M`)
+- `trafficAwareDuration`: ISO-8601 duration string (`staticDuration + trafficDelay`, e.g. `PT1H2M`)
+- `currentSpeedKmh`: Optional[float]
+- `freeFlowSpeedKmh`: Optional[float]
+- `segments`: List[`TrafficSegment`]
+- `timestamp`: ISO-8601 datetime
+- `sourceName`: str (e.g. `"Mock Traffic Provider (Demo)"`)
+- `provenance`: str (e.g. `"demo/mock"`)
+
+**Model: `TrafficSegment`**
+- `startLat`, `startLng`, `endLat`, `endLng`: float
+- `congestionLevel`: `free_flow` | `moderate` | `heavy` | `severe` | `unknown`
+- `delaySeconds`: float
+- `currentSpeedKmh`: Optional[float]
+- `freeFlowSpeedKmh`: Optional[float]
+
+**Duration Invariant:**
+`trafficAwareDuration = staticDuration + trafficDelay`. Traffic delay is applied exactly once to prevent double-counting. Base `TripResponse.estimatedDuration` remains the base static duration for legacy compatibility.
 
 ### 3. Scenarios
 `POST /scenarios/evaluate`

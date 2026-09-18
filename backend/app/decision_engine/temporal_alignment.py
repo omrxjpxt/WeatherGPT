@@ -1,42 +1,41 @@
-from typing import List, Tuple
-from datetime import datetime
+from typing import List, Tuple, Optional
+from datetime import datetime, timedelta
 from app.decision_engine.normalized_models import NormalizedRoute, NormalizedWeatherPoint, NormalizedRouteSegment
+from app.models.traffic import TrafficSnapshot
 
 def align_route_with_weather(
     route: NormalizedRoute,
     departure_time: datetime,
-    weather_timeline: List[NormalizedWeatherPoint]
+    weather_timeline: List[NormalizedWeatherPoint],
+    traffic: Optional[TrafficSnapshot] = None
 ) -> List[Tuple[NormalizedRouteSegment, datetime, NormalizedWeatherPoint]]:
     """
     Given a route and departure time, estimates when the user reaches each segment.
     Associates the relevant weather data with each segment and time.
     
-    MVP ENGINEERING ASSUMPTION (Forecast-bucket alignment):
-    Currently uses nearest-weather-point logic. This matches segment arrival time
-    to the nearest available forecast bucket in the timeline.
-    
-    LIMITATION:
-    This does NOT imply exact weather certainty at every timestamp. 
-    It is an approximation of expected conditions. Future versions may interpolate 
-    between buckets or use probabilistic bands.
-    
-    Architected so future ETA uncertainty can be represented (currently using exact estimated_duration).
+    If traffic is provided with delay, advances current_time accounting for traffic delay,
+    implementing the temporal exposure shift effect.
     """
     aligned_segments = []
     current_time = departure_time
     
-    for segment in route.segments:
-        # The arrival time for THIS segment is roughly the time we start it.
-        # In a more advanced model, we'd use a probability distribution of arrival times.
+    traffic_segments = traffic.segments if (traffic and traffic.segments) else []
+    
+    for idx, segment in enumerate(route.segments):
         segment_arrival_time = current_time
         
-        # Find the closest weather point in the timeline
         closest_weather = _get_closest_weather(segment_arrival_time, weather_timeline)
-        
         aligned_segments.append((segment, segment_arrival_time, closest_weather))
         
-        # Advance time by the estimated duration of this segment
-        current_time += segment.estimated_duration
+        # Advance time: base static duration + segment traffic delay (if present)
+        seg_delay_sec = 0.0
+        if idx < len(traffic_segments):
+            seg_delay_sec = max(0.0, traffic_segments[idx].delay_seconds)
+        elif traffic and traffic.delay_seconds > 0 and len(route.segments) > 0:
+            # Distribute evenly if segments array not populated
+            seg_delay_sec = max(0.0, traffic.delay_seconds / len(route.segments))
+            
+        current_time += segment.estimated_duration + timedelta(seconds=seg_delay_sec)
         
     return aligned_segments
 

@@ -25,6 +25,17 @@ The Flutter application strictly consumes the FastAPI endpoints via HTTP reposit
 ## Scenario Traceability
 All trip analysis and scenario results are tagged with a unique `analysis_id` / `scenario_id`. This ID is persisted along with the input context and decision output for auditability and historical replay.
 
+## Traffic Intelligence Integration
+Traffic is treated as a first-class, provider-based input to the trip decision pipeline:
+- **Provider Abstraction (`app/providers/traffic`)**: Abstract `TrafficProvider` with concrete implementations: `MockTrafficProvider`, `UnavailableTrafficProvider`, and `FallbackTrafficProvider`. Live providers (e.g. Google Routes Traffic / TomTom) can be plugged in without changing the service or engine.
+- **Base Route Decoupling**: Traffic state is kept logically separate from the base route model (`NormalizedRouteSegment`). Route geometry and static timings are evaluated independently, allowing routing and traffic to fail or succeed in isolation.
+- **Three Explicitly Separate Traffic Effects**:
+  1. *Temporal Exposure Shift*: Segment delays push estimated arrival times downstream (`temporal_alignment.py`), ensuring that weather conditions are sampled at the exact time the traveler reaches each point.
+  2. *Extended Environmental Exposure*: Extra delay spent in rain, extreme heat, or wind increases the segment's physical exposure duration via a bounded `temporal_multiplier` (`risk_model.py`).
+  3. *Direct Congestion Risk Factor*: Heavy or severe congestion for motorized transport modes adds a distinct "Traffic Congestion" `RiskFactor` to the assessment without distorting underlying meteorological risk scores.
+- **Duration Accounting**: Enforces the invariant `trafficAwareDuration = staticDuration + trafficDelay`. Delay is applied exactly once across the pipeline, strictly preventing double-counting.
+- **Mock Provenance Enforcement**: `MockTrafficProvider` outputs `status = mock`, `provenance = "demo/mock"`, and `source_name = "Mock Traffic Provider (Demo)"`. Contradictory combinations (such as `status = live` with mock provenance) are rejected by model validators.
+
 ## Decision Engine Policies
 The core logic resides in `app/decision_engine`. 
 
@@ -32,4 +43,4 @@ The core logic resides in `app/decision_engine`.
 > The engine operates purely on **engineering assumptions** regarding mode exposure, risk aggregation (bottleneck vs. duration), geographic proximity (Haversine approximations), and precipitation scaling. These assumptions are fully isolated, explicitly documented, and configurable, allowing seamless replacement with **scientifically supported models** in future iterations without architectural rewrites.
 
 > [!NOTE]
-> **MVP Limitation:** External APIs are mocked. Departure candidate search is constrained to deterministic `-30m` to `+45m` offsets. Alert geometry defaults to regional boundaries when exact polygons are missing.
+> **MVP Limitation:** External traffic uses deterministic mock calculations based on hour-of-day and transport mode (free-flow for walk/metro, delay for motorized during rush hours). Departure candidate search is constrained to deterministic `-30m` to `+45m` offsets. Alert geometry defaults to regional boundaries when exact polygons are missing.

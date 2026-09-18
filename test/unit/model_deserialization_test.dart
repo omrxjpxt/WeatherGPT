@@ -173,6 +173,149 @@ void main() {
       expect(response.risk, isNull);
       expect(response.recommendation, isNull);
       expect(response.route, isEmpty);
+      expect(response.traffic, isNull);
+    });
+
+    test('TrafficSnapshot deserialization and trafficDelay computation', () {
+      final json = {
+        'status': 'mock',
+        'condition': 'congested',
+        'provenance': 'demo/mock',
+        'sourceName': 'Mock Traffic Provider (Demo)',
+        'congestionLevel': 'moderate',
+        'staticDuration': 'PT50M',
+        'trafficAwareDuration': 'PT1H2M',
+        'delaySeconds': 720.0,
+        'currentSpeedKmh': 35.0,
+        'freeFlowSpeedKmh': 45.0,
+        'timestamp': '2026-09-18T14:30:00Z',
+        'segments': [
+          {
+            'startLat': 28.5355,
+            'startLng': 77.3910,
+            'endLat': 28.5455,
+            'endLng': 77.4010,
+            'congestionLevel': 'moderate',
+            'delaySeconds': 360.0,
+            'currentSpeedKmh': 32.0,
+            'freeFlowSpeedKmh': 45.0,
+          },
+          {
+            'startLat': 28.5455,
+            'startLng': 77.4010,
+            'endLat': 28.5555,
+            'endLng': 77.4110,
+            'congestionLevel': 'moderate',
+            'delaySeconds': 360.0,
+            'currentSpeedKmh': 38.0,
+            'freeFlowSpeedKmh': 45.0,
+          }
+        ]
+      };
+
+      final snapshot = TrafficSnapshot.fromJson(json);
+      expect(snapshot.status, TrafficStatus.mock);
+      expect(snapshot.condition, TrafficCondition.congested);
+      expect(snapshot.provenance, 'demo/mock');
+      expect(snapshot.sourceName, 'Mock Traffic Provider (Demo)');
+      expect(snapshot.congestionLevel, CongestionLevel.moderate);
+      expect(snapshot.staticDuration.inMinutes, 50);
+      expect(snapshot.trafficAwareDuration.inMinutes, 62);
+      expect(snapshot.trafficDelay.inMinutes, 12);
+      // Invariant: trafficAwareDuration = staticDuration + trafficDelay
+      expect(snapshot.trafficAwareDuration, snapshot.staticDuration + snapshot.trafficDelay);
+      expect(snapshot.segments.length, 2);
+      expect(snapshot.segments[0].congestionLevel, CongestionLevel.moderate);
+      expect(snapshot.segments[0].delaySeconds, 360.0);
+    });
+
+    test('TripResponse deserialization preserves backward compatibility when traffic is absent or null', () {
+      final jsonWithoutTraffic = {
+        'analysisId': 'legacy-analysis-1',
+        'status': 'success',
+        'request': {
+          'origin': 'Noida',
+          'destination': 'Delhi',
+          'departureTime': '2026-08-27T08:00:00Z',
+          'mode': 'car'
+        },
+        'risk': {
+          'overallScore': 25,
+          'level': 'low',
+          'confidence': {'level': 'high', 'explanation': 'Clear skies'},
+          'factors': [],
+          'summary': 'Good to travel'
+        },
+        'route': [],
+        'recommendation': {
+          'headline': 'All clear',
+          'body': 'Safe conditions',
+          'alternativeAction': 'proceed',
+        },
+        'modeOptions': [],
+        'hazards': [],
+        'sources': [],
+        'estimatedDuration': 'PT45M',
+        'distanceKm': 25.0
+      };
+
+      final legacyResponse = TripResponse.fromJson(jsonWithoutTraffic);
+      expect(legacyResponse.traffic, isNull);
+      expect(legacyResponse.status, TripStatus.success);
+      expect(legacyResponse.risk?.overallScore, 25);
+
+      final jsonWithNullTraffic = Map<String, dynamic>.from(jsonWithoutTraffic);
+      jsonWithNullTraffic['traffic'] = null;
+      final nullTrafficResponse = TripResponse.fromJson(jsonWithNullTraffic);
+      expect(nullTrafficResponse.traffic, isNull);
+    });
+
+    test('TripResponse deserialization with populated traffic snapshot', () {
+      final json = {
+        'analysisId': 'traffic-analysis-1',
+        'status': 'success',
+        'request': {
+          'origin': 'Noida',
+          'destination': 'Delhi',
+          'departureTime': '2026-08-27T08:00:00Z',
+          'mode': 'car'
+        },
+        'risk': {
+          'overallScore': 45,
+          'level': 'moderate',
+          'confidence': {'level': 'high', 'explanation': 'Clear skies'},
+          'factors': [],
+          'summary': 'Allow extra time'
+        },
+        'route': [],
+        'recommendation': null,
+        'modeOptions': [],
+        'hazards': [],
+        'sources': [],
+        'estimatedDuration': 'PT50M',
+        'distanceKm': 30.0,
+        'traffic': {
+          'status': 'mock',
+          'condition': 'congested',
+          'provenance': 'demo/mock',
+          'sourceName': 'Mock Traffic Provider (Demo)',
+          'congestionLevel': 'heavy',
+          'staticDuration': 'PT50M',
+          'trafficAwareDuration': 'PT1H10M',
+          'delaySeconds': 1200.0,
+          'currentSpeedKmh': 25.0,
+          'freeFlowSpeedKmh': 50.0,
+          'timestamp': '2026-09-18T14:30:00Z',
+          'segments': []
+        }
+      };
+
+      final response = TripResponse.fromJson(json);
+      expect(response.traffic, isNotNull);
+      expect(response.traffic!.status, TrafficStatus.mock);
+      expect(response.traffic!.congestionLevel, CongestionLevel.heavy);
+      expect(response.traffic!.trafficDelay.inMinutes, 20);
+      expect(response.traffic!.trafficAwareDuration.inMinutes, 70);
     });
   });
 }

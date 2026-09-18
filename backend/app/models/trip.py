@@ -8,6 +8,7 @@ from app.models.enums import TransportMode, TripStatus
 from app.models.risk import RiskAssessment
 from app.models.route import RouteSegment
 from app.models.hazard import Hazard
+from app.models.traffic import TrafficSnapshot
 
 class Recommendation(WeatherBaseModel):
     headline: str
@@ -48,3 +49,4 @@ class TripResponse(WeatherBaseModel):
     sources: List[DataSource]
     estimated_duration: timedelta
     distance_km: float
+    traffic: Optional[TrafficSnapshot] = None
