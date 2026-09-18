@@ -317,5 +317,154 @@ void main() {
       expect(response.traffic!.trafficDelay.inMinutes, 20);
       expect(response.traffic!.trafficAwareDuration.inMinutes, 70);
     });
+
+    test('TripResponse preserves backward compatibility when routes is absent, null, or empty list', () {
+      final jsonNoRoutes = {
+        'analysisId': 'no-routes-1',
+        'status': 'success',
+        'request': {
+          'origin': 'Noida',
+          'destination': 'Delhi',
+          'departureTime': '2026-08-27T08:00:00Z',
+          'mode': 'car'
+        },
+        'risk': null,
+        'route': [],
+        'recommendation': null,
+        'modeOptions': [],
+        'hazards': [],
+        'sources': [],
+        'estimatedDuration': 'PT45M',
+        'distanceKm': 25.0,
+      };
+
+      final resp1 = TripResponse.fromJson(jsonNoRoutes);
+      expect(resp1.routes, isEmpty);
+
+      final jsonNullRoutes = Map<String, dynamic>.from(jsonNoRoutes);
+      jsonNullRoutes['routes'] = null;
+      final resp2 = TripResponse.fromJson(jsonNullRoutes);
+      expect(resp2.routes, isEmpty);
+
+      final jsonEmptyRoutes = Map<String, dynamic>.from(jsonNoRoutes);
+      jsonEmptyRoutes['routes'] = [];
+      final resp3 = TripResponse.fromJson(jsonEmptyRoutes);
+      expect(resp3.routes, isEmpty);
+    });
+
+    test('TripResponse deserialization with populated routes list and RouteEvaluation', () {
+      final json = {
+        'analysisId': 'multi-route-analysis-1',
+        'status': 'success',
+        'request': {
+          'origin': 'Noida',
+          'destination': 'Gurgaon',
+          'departureTime': '2026-08-27T08:00:00Z',
+          'mode': 'car'
+        },
+        'risk': {
+          'overallScore': 42,
+          'level': 'moderate',
+          'confidence': {'level': 'high', 'explanation': 'High confidence'},
+          'factors': [],
+          'summary': 'Moderate risk'
+        },
+        'route': [],
+        'recommendation': {
+          'headline': 'Via Expressway',
+          'body': 'Lowest overall travel delay.',
+          'alternativeAction': 'proceed',
+        },
+        'modeOptions': [],
+        'hazards': [],
+        'sources': [],
+        'estimatedDuration': 'PT34M',
+        'distanceKm': 35.5,
+        'routes': [
+          {
+            'routeId': 'route_1',
+            'summary': 'Via Noida-Greater Noida Expy',
+            'distanceKm': 35.5,
+            'staticDuration': 'PT22M',
+            'polyline': 'mock_poly_1',
+            'segments': [],
+            'hazards': [],
+            'sourceName': 'Google Routes',
+            'provenance': 'google_routes',
+            'evaluation': {
+              'routeId': 'route_1',
+              'riskScore': 42,
+              'riskLevel': 'moderate',
+              'staticDuration': 'PT22M',
+              'trafficAwareDuration': 'PT34M',
+              'trafficDelaySeconds': 720.0,
+              'exposureScore': 16.8,
+              'bottleneckScore': 40,
+              'hazardCount': 1,
+              'isFeasible': true,
+              'recommendationHeadline': 'Expressway corridor',
+              'recommendationBody': 'Optimal route despite delay',
+              'isSelected': true,
+              'selectionReason': 'Recommended: Moderate risk (42/100) with 34 min travel time (+12m traffic).',
+              'provenance': 'google_routes'
+            }
+          },
+          {
+            'routeId': 'route_2',
+            'summary': 'Via DND Flyway',
+            'distanceKm': 38.0,
+            'staticDuration': 'PT27M',
+            'polyline': 'mock_poly_2',
+            'segments': [],
+            'hazards': [],
+            'sourceName': 'Google Routes',
+            'provenance': 'google_routes',
+            'evaluation': {
+              'routeId': 'route_2',
+              'riskScore': 45,
+              'riskLevel': 'moderate',
+              'staticDuration': 'PT27M',
+              'trafficAwareDuration': 'PT29M',
+              'trafficDelaySeconds': 120.0,
+              'exposureScore': 18.0,
+              'bottleneckScore': 30,
+              'hazardCount': 0,
+              'isFeasible': true,
+              'recommendationHeadline': 'Flyway corridor',
+              'recommendationBody': 'Lighter traffic',
+              'isSelected': false,
+              'selectionReason': '5 min faster effective travel time.',
+              'provenance': 'google_routes'
+            }
+          }
+        ]
+      };
+
+      final response = TripResponse.fromJson(json);
+      expect(response.routes.length, 2);
+
+      final r1 = response.routes[0];
+      expect(r1.routeId, 'route_1');
+      expect(r1.summary, 'Via Noida-Greater Noida Expy');
+      expect(r1.distanceKm, 35.5);
+      expect(r1.staticDuration.inMinutes, 22);
+      expect(r1.evaluation.riskScore, 42);
+      expect(r1.evaluation.riskLevel, RiskLevel.moderate);
+      expect(r1.evaluation.trafficAwareDuration.inMinutes, 34);
+      expect(r1.evaluation.trafficDelaySeconds, 720.0);
+      expect(r1.evaluation.isSelected, isTrue);
+      expect(r1.evaluation.selectionReason, contains('Recommended'));
+
+      final r2 = response.routes[1];
+      expect(r2.routeId, 'route_2');
+      expect(r2.evaluation.isSelected, isFalse);
+      expect(r2.evaluation.trafficAwareDuration.inMinutes, 29);
+
+      // Verify serialization round-trip
+      final serialized = response.toJson();
+      expect(serialized['routes'], isList);
+      expect((serialized['routes'] as List).length, 2);
+    });
   });
 }
+

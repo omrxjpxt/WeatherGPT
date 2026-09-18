@@ -32,13 +32,57 @@ class TripAnalysisScreen extends ConsumerWidget {
   }
 }
 
-class _TripAnalysisBody extends StatelessWidget {
+class _TripAnalysisBody extends StatefulWidget {
   final TripResponse trip;
 
   const _TripAnalysisBody({required this.trip});
 
   @override
+  State<_TripAnalysisBody> createState() => _TripAnalysisBodyState();
+}
+
+class _TripAnalysisBodyState extends State<_TripAnalysisBody> {
+  late String _activeRouteId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initActiveRouteId();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TripAnalysisBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.trip != widget.trip) {
+      _initActiveRouteId();
+    }
+  }
+
+  void _initActiveRouteId() {
+    final selected = widget.trip.routes.where((r) => r.evaluation.isSelected).firstOrNull;
+    _activeRouteId = selected?.routeId ?? widget.trip.routes.firstOrNull?.routeId ?? '';
+  }
+
+  EvaluatedRoute? get _activeRoute =>
+      widget.trip.routes.where((r) => r.routeId == _activeRouteId).firstOrNull;
+
+  @override
   Widget build(BuildContext context) {
+    final active = _activeRoute;
+    final displaySegments = (active != null && active.segments.isNotEmpty)
+        ? active.segments
+        : widget.trip.route;
+    final displayHazards = (active != null && active.hazards.isNotEmpty)
+        ? active.hazards
+        : widget.trip.hazards;
+    final displayTraffic = active?.traffic ?? widget.trip.traffic;
+    final displayDistance = active?.distanceKm ?? widget.trip.distanceKm;
+    final displayDuration = active?.evaluation.trafficAwareDuration ??
+        (widget.trip.traffic != null && widget.trip.traffic!.status != TrafficStatus.unavailable
+            ? widget.trip.traffic!.trafficAwareDuration
+            : widget.trip.estimatedDuration);
+    final displayRisk = active?.risk ?? widget.trip.risk;
+
     return CustomScrollView(
       slivers: [
         // ── Map Section ──
@@ -47,7 +91,7 @@ class _TripAnalysisBody extends StatelessWidget {
             height: 320,
             child: Stack(
               children: [
-                _RouteMap(segments: trip.route, hazards: trip.hazards),
+                _RouteMap(segments: displaySegments, hazards: displayHazards),
                 // Back button & header overlay
                 Positioned(
                   top: MediaQuery.of(context).padding.top + 8,
@@ -86,7 +130,7 @@ class _TripAnalysisBody extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '${trip.request.origin} → ${trip.request.destination}',
+                                '${widget.trip.request.origin} → ${widget.trip.request.destination}',
                                 style: AppTypography.labelMd.copyWith(
                                   color: AppColors.primaryText,
                                   fontWeight: FontWeight.w600,
@@ -96,7 +140,7 @@ class _TripAnalysisBody extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${trip.distanceKm} km • ${trip.traffic != null && trip.traffic!.status != TrafficStatus.unavailable ? '${trip.traffic!.trafficAwareDuration.inMinutes} min' : '${trip.estimatedDuration.inMinutes} min'} • ${_modeLabel(trip.request.mode)}',
+                                '$displayDistance km • ${displayDuration.inMinutes} min • ${_modeLabel(widget.trip.request.mode)}',
                                 style: AppTypography.bodySm.copyWith(
                                   color: AppColors.onSurfaceVariant,
                                 ),
@@ -106,9 +150,9 @@ class _TripAnalysisBody extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (trip.risk != null) ...[
+                        if (displayRisk != null) ...[
                           const SizedBox(width: 12),
-                          RiskBadge(level: trip.risk!.level),
+                          RiskBadge(level: displayRisk.level),
                         ],
                       ],
                     ),
@@ -125,21 +169,31 @@ class _TripAnalysisBody extends StatelessWidget {
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               // Risk summary card
-              _buildRiskCard(context, trip),
+              _buildRiskCard(context, widget.trip, displayRisk),
               const SizedBox(height: Spacing.stackMd),
 
               // Traffic conditions card
-              _buildTrafficCard(context, trip),
+              _buildTrafficCard(
+                context,
+                widget.trip,
+                displayTraffic,
+                active?.staticDuration ?? widget.trip.estimatedDuration,
+              ),
               const SizedBox(height: Spacing.stackLg),
+
+              // Route Alternatives
+              if (widget.trip.routes.length > 1) ...[
+                _buildRouteAlternativesSection(context),
+              ],
 
               // Route segments
               const SectionTitle(title: 'Route Segments'),
               const SizedBox(height: Spacing.stackSm),
-              if (trip.route.isEmpty)
+              if (displaySegments.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    trip.status == TripStatus.routingUnavailable
+                    widget.trip.status == TripStatus.routingUnavailable
                         ? 'Routing is currently unavailable.'
                         : 'No route segments available.',
                     style: AppTypography.bodySm.copyWith(
@@ -148,19 +202,19 @@ class _TripAnalysisBody extends StatelessWidget {
                   ),
                 )
               else
-                ...trip.route.map((seg) => _buildSegmentRow(seg)),
+                ...displaySegments.map((seg) => _buildSegmentRow(seg)),
               const SizedBox(height: Spacing.stackLg),
 
               // Hazards
-              if (trip.hazards.isNotEmpty) ...[
+              if (displayHazards.isNotEmpty) ...[
                 const SectionTitle(title: 'Hazards'),
                 const SizedBox(height: Spacing.stackSm),
-                ...trip.hazards.map((h) => _buildHazardCard(context, h)),
+                ...displayHazards.map((h) => _buildHazardCard(context, h)),
                 const SizedBox(height: Spacing.stackLg),
               ],
 
               // Recommendation
-              _buildRecommendationCard(context, trip),
+              _buildRecommendationCard(context, widget.trip),
               const SizedBox(height: Spacing.stackLg),
 
               // Action buttons
@@ -173,14 +227,158 @@ class _TripAnalysisBody extends StatelessWidget {
     );
   }
 
-  Widget _buildRiskCard(BuildContext context, TripResponse trip) {
+  Widget _buildRouteAlternativesSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle(title: 'Route Alternatives'),
+        const SizedBox(height: Spacing.stackSm),
+        ...widget.trip.routes.map((route) => _buildRouteCard(context, route)),
+        const SizedBox(height: Spacing.stackLg),
+      ],
+    );
+  }
+
+  Widget _buildRouteCard(BuildContext context, EvaluatedRoute route) {
+    final isInspected = route.routeId == _activeRouteId;
+    final isRecommended = route.evaluation.isSelected;
+    final delayMins = (route.evaluation.trafficDelaySeconds / 60).round();
+    final delayStr = delayMins > 0 ? ' (+${delayMins}m traffic)' : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Spacing.stackSm),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: Key('route_card_${route.routeId}'),
+          onTap: () {
+            setState(() {
+              _activeRouteId = route.routeId;
+            });
+          },
+          borderRadius: BorderRadius.circular(Radii.card),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isInspected ? AppColors.surfaceContainerLow : AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(Radii.card),
+              border: Border.all(
+                color: isInspected
+                    ? AppColors.sunriseAmber
+                    : (isRecommended ? AppColors.cardBorderWarm : AppColors.cardBorderCool),
+                width: isInspected ? 2.0 : 1.0,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  offset: Offset(0, 2),
+                  blurRadius: 8,
+                  color: AppColors.softShadow,
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                route.summary.isNotEmpty ? route.summary : 'Route ${route.routeId}',
+                                style: AppTypography.labelMd.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryText,
+                                ),
+                              ),
+                              if (isRecommended) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.riskLowBg,
+                                    borderRadius: BorderRadius.circular(Radii.badge),
+                                    border: Border.all(color: AppColors.riskLow.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    'RECOMMENDED',
+                                    style: AppTypography.labelCaps.copyWith(
+                                      color: AppColors.riskLow,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (isInspected) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.sunriseAmber.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(Radii.badge),
+                                  ),
+                                  child: Text(
+                                    'VIEWING',
+                                    style: AppTypography.labelCaps.copyWith(
+                                      color: AppColors.secondary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${route.distanceKm} km • ${route.evaluation.trafficAwareDuration.inMinutes} min$delayStr',
+                            style: AppTypography.bodySm.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    RiskBadge(level: route.evaluation.riskLevel),
+                  ],
+                ),
+                if (route.evaluation.selectionReason != null && route.evaluation.selectionReason!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    route.evaluation.selectionReason!,
+                    style: AppTypography.bodySm.copyWith(
+                      fontSize: 12,
+                      color: isRecommended ? AppColors.primaryText : AppColors.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRiskCard(BuildContext context, TripResponse trip, [RiskAssessment? overrideRisk]) {
+    final risk = overrideRisk ?? trip.risk;
     return WeatherCard(
       child: Row(
         children: [
-          if (trip.risk != null) ...[
+          if (risk != null) ...[
             RiskScoreIndicator(
-              score: trip.risk!.overallScore,
-              level: trip.risk!.level,
+              score: risk.overallScore,
+              level: risk.level,
             ),
             const SizedBox(width: Spacing.md),
           ],
@@ -188,11 +386,11 @@ class _TripAnalysisBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (trip.risk != null) RiskBadge(level: trip.risk!.level),
+                if (risk != null) RiskBadge(level: risk.level),
                 const SizedBox(height: 8),
-                if (trip.risk != null)
+                if (risk != null)
                   Text(
-                    trip.risk!.summary,
+                    risk.summary,
                     style: AppTypography.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -227,8 +425,14 @@ class _TripAnalysisBody extends StatelessWidget {
     );
   }
 
-  Widget _buildTrafficCard(BuildContext context, TripResponse trip) {
-    final traffic = trip.traffic;
+  Widget _buildTrafficCard(
+    BuildContext context,
+    TripResponse trip, [
+    TrafficSnapshot? overrideTraffic,
+    Duration? overrideStaticDuration,
+  ]) {
+    final traffic = overrideTraffic ?? trip.traffic;
+    final staticDuration = overrideStaticDuration ?? trip.estimatedDuration;
     final isAvailable = traffic != null && traffic.status != TrafficStatus.unavailable;
 
     if (!isAvailable) {
@@ -263,7 +467,7 @@ class _TripAnalysisBody extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Trip evaluated using base routing (${trip.estimatedDuration.inMinutes} min static duration). No traffic delay applied.',
+                    'Trip evaluated using base routing (${staticDuration.inMinutes} min static duration). No traffic delay applied.',
                     style: AppTypography.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),

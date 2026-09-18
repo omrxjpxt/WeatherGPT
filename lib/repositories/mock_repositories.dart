@@ -7,6 +7,8 @@ class MockTripRepository implements TripRepository {
   Future<TripResponse> analyzeTrip(TripRequest request) async {
     await Future.delayed(const Duration(milliseconds: 300));
     final riskScore = _riskForTime(request.departureTime, request.mode);
+    final trafficSnapshot = _buildMockTraffic(request.mode, _etaForMode(request.mode));
+    final routes = _buildMockEvaluatedRoutes(request, riskScore, trafficSnapshot);
     return TripResponse(
       request: request,
       risk: _buildRisk(riskScore),
@@ -21,7 +23,8 @@ class MockTripRepository implements TripRepository {
       sources: _buildSources(),
       estimatedDuration: _etaForMode(request.mode),
       distanceKm: request.mode == TransportMode.metro ? 42.0 : 35.5,
-      traffic: _buildMockTraffic(request.mode, _etaForMode(request.mode)),
+      traffic: trafficSnapshot,
+      routes: routes,
     );
   }
 
@@ -98,6 +101,101 @@ class MockTripRepository implements TripRepository {
         ],
       ),
     ];
+  }
+
+  List<EvaluatedRoute> _buildMockEvaluatedRoutes(
+    TripRequest request,
+    int primaryRisk,
+    TrafficSnapshot primaryTraffic,
+  ) {
+    final route1Segs = _buildRoute(request.mode);
+    final static1 = _etaForMode(request.mode);
+    final risk1 = _buildRisk(primaryRisk);
+
+    final route1 = EvaluatedRoute(
+      routeId: 'route_1',
+      summary: request.mode == TransportMode.car ? 'Via Noida-Greater Noida Expy' : 'Primary Route',
+      distanceKm: request.mode == TransportMode.metro ? 42.0 : 35.5,
+      staticDuration: static1,
+      segments: route1Segs,
+      traffic: primaryTraffic,
+      hazards: _buildHazards(),
+      sourceName: 'Mock Routing (Demo)',
+      provenance: 'demo/mock',
+      risk: risk1,
+      evaluation: RouteEvaluation(
+        routeId: 'route_1',
+        riskScore: primaryRisk,
+        riskLevel: _levelForScore(primaryRisk),
+        staticDuration: static1,
+        trafficAwareDuration: primaryTraffic.trafficAwareDuration,
+        trafficDelaySeconds: primaryTraffic.delaySeconds,
+        exposureScore: primaryRisk * 0.4,
+        bottleneckScore: primaryRisk > 50 ? 60 : 20,
+        hazardCount: 2,
+        isFeasible: true,
+        recommendationHeadline: 'Recommended Route',
+        recommendationBody: 'Direct expressway corridor with managed waterlogging.',
+        isSelected: true,
+        selectionReason: 'Recommended: ${_levelForScore(primaryRisk).name.toUpperCase()} risk ($primaryRisk/100) with ${primaryTraffic.trafficAwareDuration.inMinutes} min travel time.',
+        provenance: 'demo/mock',
+      ),
+    );
+
+    if (request.mode != TransportMode.car) {
+      return [route1];
+    }
+
+    final static2 = const Duration(minutes: 56);
+    final delay2 = const Duration(minutes: 24);
+    final trafficAware2 = static2 + delay2;
+    final traffic2 = TrafficSnapshot(
+      status: TrafficStatus.mock,
+      condition: TrafficCondition.congested,
+      congestionLevel: CongestionLevel.heavy,
+      delaySeconds: delay2.inSeconds.toDouble(),
+      staticDuration: static2,
+      trafficAwareDuration: trafficAware2,
+      currentSpeedKmh: 28.5,
+      freeFlowSpeedKmh: 45.0,
+      timestamp: DateTime(2026, 8, 27, 8, 0),
+      sourceName: 'Mock Traffic Provider (Demo)',
+      provenance: 'demo/mock',
+    );
+    final riskScore2 = (primaryRisk + 6).clamp(0, 100);
+    final risk2 = _buildRisk(riskScore2);
+
+    final route2 = EvaluatedRoute(
+      routeId: 'route_2',
+      summary: 'Via DND Flyway & Ring Road',
+      distanceKm: 38.0,
+      staticDuration: static2,
+      segments: route1Segs,
+      traffic: traffic2,
+      hazards: _buildHazards(),
+      sourceName: 'Mock Routing (Demo)',
+      provenance: 'demo/mock',
+      risk: risk2,
+      evaluation: RouteEvaluation(
+        routeId: 'route_2',
+        riskScore: riskScore2,
+        riskLevel: _levelForScore(riskScore2),
+        staticDuration: static2,
+        trafficAwareDuration: trafficAware2,
+        trafficDelaySeconds: delay2.inSeconds.toDouble(),
+        exposureScore: riskScore2 * 0.45,
+        bottleneckScore: 70,
+        hazardCount: 3,
+        isFeasible: true,
+        recommendationHeadline: 'Alternative Route',
+        recommendationBody: 'High congestion near Ashram bottleneck.',
+        isSelected: false,
+        selectionReason: '+6 higher risk score and ${trafficAware2.inMinutes - primaryTraffic.trafficAwareDuration.inMinutes} min slower travel time.',
+        provenance: 'demo/mock',
+      ),
+    );
+
+    return [route1, route2];
   }
 
   // ── Helpers ──

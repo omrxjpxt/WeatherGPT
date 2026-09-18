@@ -6,7 +6,7 @@ import uuid
 from app.models.base import WeatherBaseModel
 from app.models.enums import TransportMode, TripStatus
 from app.models.risk import RiskAssessment
-from app.models.route import RouteSegment
+from app.models.route import RouteSegment, EvaluatedRoute
 from app.models.hazard import Hazard
 from app.models.traffic import TrafficSnapshot
 
@@ -50,3 +50,4 @@ class TripResponse(WeatherBaseModel):
     estimated_duration: timedelta
     distance_km: float
     traffic: Optional[TrafficSnapshot] = None
+    routes: List[EvaluatedRoute] = Field(default_factory=list)

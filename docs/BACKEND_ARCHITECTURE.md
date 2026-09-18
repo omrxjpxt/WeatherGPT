@@ -36,6 +36,15 @@ Traffic is treated as a first-class, provider-based input to the trip decision p
 - **Duration Accounting**: Enforces the invariant `trafficAwareDuration = staticDuration + trafficDelay`. Delay is applied exactly once across the pipeline, strictly preventing double-counting.
 - **Mock Provenance Enforcement**: `MockTrafficProvider` outputs `status = mock`, `provenance = "demo/mock"`, and `source_name = "Mock Traffic Provider (Demo)"`. Contradictory combinations (such as `status = live` with mock provenance) are rejected by model validators.
 
+## Route Alternative Evaluation Architecture
+The system evaluates multiple route alternatives returned by the routing provider using the same deterministic decision engine:
+- **Orchestration Layer (`app/decision_engine/route_evaluator.py`)**: `RouteEvaluator` acts solely as an orchestration coordinator. It does NOT duplicate risk formulas, weights, or decision engine logic. Each route alternative is passed independently to `DecisionEngine.evaluate_route_core`.
+- **N+1 Traffic Call Prevention**: If the routing provider (e.g., Google Routes) already provides verified traffic-aware duration and static duration data on the returned route alternatives, the pipeline normalizes and reuses that embedded data directly. An external `TrafficProvider` is only invoked when traffic information is not already present.
+- **Strict 6-Step Selection Policy**: Evaluates feasibility against `arrival_deadline`, filters hard emergency avoidance alerts vs advisories, checks risk tiers, evaluates score differences ($\ge 15$ vs $< 15$), and breaks ties via exposure score, distance, and route ID.
+- **Backward Compatibility**: Single routes remain fully supported without fabricated alternatives. Payloads with empty or absent `routes` deserialize seamlessly.
+- **Separation of Concerns**: Recommendation selection is purely backend-driven (`is_selected`). Flutter client UI inspection is strictly decoupled (`activeRouteId`).
+
+
 ## Decision Engine Policies
 The core logic resides in `app/decision_engine`. 
 

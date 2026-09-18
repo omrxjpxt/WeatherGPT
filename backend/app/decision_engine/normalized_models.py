@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
-from pydantic import BaseModel
+import uuid
+from pydantic import BaseModel, Field
 
 from app.models.enums import TransportMode, HazardType, HazardSourceClass, AlertSeverity, AlertSourceClass
 from app.models.traffic import TrafficSnapshot
@@ -28,9 +29,15 @@ class NormalizedRouteSegment(BaseModel):
     traffic_congestion_factor: float = 1.0
 
 class NormalizedRoute(BaseModel):
+    route_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    summary: str = "Primary Route"
+    polyline: Optional[str] = None
     segments: List[NormalizedRouteSegment]
     total_distance_km: float
     total_duration: timedelta
+    provider_name: str = "Unknown"
+    provenance: str = "unknown"
+    traffic: Optional[TrafficSnapshot] = None
 
 class NormalizedHazard(BaseModel):
     id: str

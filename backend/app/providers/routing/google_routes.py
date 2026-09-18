@@ -24,7 +24,7 @@ class GoogleRoutesProvider(RoutingProvider):
         TransportMode.walk: "WALK",
     }
     
-    FIELD_MASK = "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.duration,routes.legs.steps.startLocation,routes.legs.steps.endLocation,routes.legs.steps.polyline.encodedPolyline"
+    FIELD_MASK = "routes.distanceMeters,routes.duration,routes.staticDuration,routes.description,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.duration,routes.legs.steps.startLocation,routes.legs.steps.endLocation,routes.legs.steps.polyline.encodedPolyline"
 
     def __init__(self):
         self._last_status = RouteStatus.live
@@ -117,9 +117,32 @@ class GoogleRoutesProvider(RoutingProvider):
     def _parse_response(self, data: dict) -> List[NormalizedRoute]:
         normalized_routes = []
         try:
-            for route_data in data.get("routes", []):
+            for idx, route_data in enumerate(data.get("routes", [])):
                 total_distance_km = route_data.get("distanceMeters", 0) / 1000.0
                 total_duration = self._parse_duration(route_data.get("duration", "0s"))
+                summary = route_data.get("description") or f"Route {idx+1}"
+                polyline = route_data.get("polyline", {}).get("encodedPolyline")
+                
+                # Normalize embedded traffic if Google Routes returned staticDuration
+                embedded_traffic = None
+                if "staticDuration" in route_data:
+                    static_dur = self._parse_duration(route_data["staticDuration"])
+                    traffic_aware_dur = total_duration
+                    delay_sec = max(0.0, (traffic_aware_dur - static_dur).total_seconds())
+                    from app.models.enums import TrafficStatus, TrafficCondition, CongestionLevel
+                    from app.models.traffic import TrafficSnapshot
+                    from datetime import datetime, timezone
+                    embedded_traffic = TrafficSnapshot(
+                        status=TrafficStatus.live,
+                        condition=TrafficCondition.congested if delay_sec > 300 else TrafficCondition.clear,
+                        congestion_level=CongestionLevel.moderate if delay_sec > 300 else CongestionLevel.free_flow,
+                        delay_seconds=delay_sec,
+                        static_duration=static_dur,
+                        traffic_aware_duration=traffic_aware_dur,
+                        timestamp=datetime.now(timezone.utc),
+                        source_name="Google Routes API",
+                        provenance="google_routes/live"
+                    )
                 
                 segments = []
                 for leg in route_data.get("legs", []):
@@ -146,9 +169,15 @@ class GoogleRoutesProvider(RoutingProvider):
                         ))
                 
                 normalized_routes.append(NormalizedRoute(
+                    route_id=f"google_route_{idx}",
+                    summary=summary,
+                    polyline=polyline,
                     segments=segments,
                     total_distance_km=total_distance_km,
-                    total_duration=total_duration
+                    total_duration=total_duration,
+                    provider_name=self.provider_name,
+                    provenance="google_routes/live",
+                    traffic=embedded_traffic
                 ))
             return normalized_routes
         except Exception as e:

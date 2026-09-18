@@ -7,7 +7,27 @@ library;
 
 enum TransportMode { bike, car, metro, walk }
 
-enum RiskLevel { low, moderate, high, severe }
+enum RiskLevel {
+  low,
+  moderate,
+  high,
+  severe;
+
+  static RiskLevel fromString(String? value) {
+    if (value == null) return RiskLevel.low;
+    switch (value.toLowerCase()) {
+      case 'severe':
+        return RiskLevel.severe;
+      case 'high':
+        return RiskLevel.high;
+      case 'moderate':
+        return RiskLevel.moderate;
+      case 'low':
+      default:
+        return RiskLevel.low;
+    }
+  }
+}
 
 enum HazardType { waterlogging, fog, heavyRain, storm, heatwave, construction, wind, heat, visibility }
 
@@ -264,6 +284,162 @@ class TrafficSnapshot {
       };
 }
 
+class RouteEvaluation {
+  final String routeId;
+  final int riskScore;
+  final RiskLevel riskLevel;
+  final Duration staticDuration;
+  final Duration trafficAwareDuration;
+  final double trafficDelaySeconds;
+  final double exposureScore;
+  final int bottleneckScore;
+  final int hazardCount;
+  final bool isFeasible;
+  final String? feasibilityReason;
+  final String recommendationHeadline;
+  final String recommendationBody;
+  final String? suggestedMode;
+  final DateTime? suggestedDepartureTime;
+  final bool isSelected;
+  final String? selectionReason;
+  final String provenance;
+
+  const RouteEvaluation({
+    required this.routeId,
+    required this.riskScore,
+    required this.riskLevel,
+    required this.staticDuration,
+    required this.trafficAwareDuration,
+    required this.trafficDelaySeconds,
+    required this.exposureScore,
+    required this.bottleneckScore,
+    required this.hazardCount,
+    this.isFeasible = true,
+    this.feasibilityReason,
+    required this.recommendationHeadline,
+    required this.recommendationBody,
+    this.suggestedMode,
+    this.suggestedDepartureTime,
+    this.isSelected = false,
+    this.selectionReason,
+    this.provenance = 'unknown',
+  });
+
+  factory RouteEvaluation.fromJson(Map<String, dynamic> json) => RouteEvaluation(
+        routeId: json['routeId'] as String? ?? '',
+        riskScore: (json['riskScore'] as num?)?.toInt() ?? 0,
+        riskLevel: RiskLevel.fromString(json['riskLevel'] as String?),
+        staticDuration: _parseDuration(json['staticDuration']?.toString() ?? '0'),
+        trafficAwareDuration: _parseDuration(json['trafficAwareDuration']?.toString() ?? '0'),
+        trafficDelaySeconds: (json['trafficDelaySeconds'] as num?)?.toDouble() ?? 0.0,
+        exposureScore: (json['exposureScore'] as num?)?.toDouble() ?? 0.0,
+        bottleneckScore: (json['bottleneckScore'] as num?)?.toInt() ?? 0,
+        hazardCount: (json['hazardCount'] as num?)?.toInt() ?? 0,
+        isFeasible: json['isFeasible'] as bool? ?? true,
+        feasibilityReason: json['feasibilityReason'] as String?,
+        recommendationHeadline: json['recommendationHeadline'] as String? ?? '',
+        recommendationBody: json['recommendationBody'] as String? ?? '',
+        suggestedMode: json['suggestedMode'] as String?,
+        suggestedDepartureTime: json['suggestedDepartureTime'] != null
+            ? DateTime.parse(json['suggestedDepartureTime'] as String).toLocal()
+            : null,
+        isSelected: json['isSelected'] as bool? ?? false,
+        selectionReason: json['selectionReason'] as String?,
+        provenance: json['provenance'] as String? ?? 'unknown',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'routeId': routeId,
+        'riskScore': riskScore,
+        'riskLevel': riskLevel.name,
+        'staticDuration': staticDuration.inSeconds.toString(),
+        'trafficAwareDuration': trafficAwareDuration.inSeconds.toString(),
+        'trafficDelaySeconds': trafficDelaySeconds,
+        'exposureScore': exposureScore,
+        'bottleneckScore': bottleneckScore,
+        'hazardCount': hazardCount,
+        'isFeasible': isFeasible,
+        'feasibilityReason': feasibilityReason,
+        'recommendationHeadline': recommendationHeadline,
+        'recommendationBody': recommendationBody,
+        'suggestedMode': suggestedMode,
+        'suggestedDepartureTime': suggestedDepartureTime?.toUtc().toIso8601String(),
+        'isSelected': isSelected,
+        'selectionReason': selectionReason,
+        'provenance': provenance,
+      };
+}
+
+class EvaluatedRoute {
+  final String routeId;
+  final String summary;
+  final double distanceKm;
+  final Duration staticDuration;
+  final String? polyline;
+  final List<RouteSegment> segments;
+  final TrafficSnapshot? traffic;
+  final RouteEvaluation evaluation;
+  final List<Hazard> hazards;
+  final String sourceName;
+  final String provenance;
+  final RiskAssessment? risk;
+
+  const EvaluatedRoute({
+    required this.routeId,
+    required this.summary,
+    required this.distanceKm,
+    required this.staticDuration,
+    this.polyline,
+    this.segments = const [],
+    this.traffic,
+    required this.evaluation,
+    this.hazards = const [],
+    this.sourceName = 'Routing Provider',
+    this.provenance = 'unknown',
+    this.risk,
+  });
+
+  factory EvaluatedRoute.fromJson(Map<String, dynamic> json) => EvaluatedRoute(
+        routeId: json['routeId'] as String? ?? '',
+        summary: json['summary'] as String? ?? '',
+        distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0.0,
+        staticDuration: _parseDuration(json['staticDuration']?.toString() ?? '0'),
+        polyline: json['polyline'] as String?,
+        segments: (json['segments'] as List?)
+                ?.map((e) => RouteSegment.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+        traffic: json['traffic'] != null
+            ? TrafficSnapshot.fromJson(json['traffic'] as Map<String, dynamic>)
+            : null,
+        evaluation: RouteEvaluation.fromJson(json['evaluation'] as Map<String, dynamic>),
+        hazards: (json['hazards'] as List?)
+                ?.map((e) => Hazard.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+        sourceName: json['sourceName'] as String? ?? 'Routing Provider',
+        provenance: json['provenance'] as String? ?? 'unknown',
+        risk: json['risk'] != null
+            ? RiskAssessment.fromJson(json['risk'] as Map<String, dynamic>)
+            : null,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'routeId': routeId,
+        'summary': summary,
+        'distanceKm': distanceKm,
+        'staticDuration': staticDuration.inSeconds.toString(),
+        'polyline': polyline,
+        'segments': segments.map((e) => e.toJson()).toList(),
+        'traffic': traffic?.toJson(),
+        'evaluation': evaluation.toJson(),
+        'hazards': hazards.map((e) => e.toJson()).toList(),
+        'sourceName': sourceName,
+        'provenance': provenance,
+        'risk': risk?.toJson(),
+      };
+}
+
 class TripResponse {
   final String? analysisId;
   final TripStatus status;
@@ -277,6 +453,7 @@ class TripResponse {
   final Duration estimatedDuration;
   final double distanceKm;
   final TrafficSnapshot? traffic;
+  final List<EvaluatedRoute> routes;
 
   TripResponse({
     this.analysisId,
@@ -291,6 +468,7 @@ class TripResponse {
     required this.estimatedDuration,
     required this.distanceKm,
     this.traffic,
+    this.routes = const [],
   });
 
   factory TripResponse.fromJson(Map<String, dynamic> json) {
@@ -309,6 +487,9 @@ class TripResponse {
       traffic: json['traffic'] != null
           ? TrafficSnapshot.fromJson(json['traffic'] as Map<String, dynamic>)
           : null,
+      routes: json['routes'] != null
+          ? (json['routes'] as List).map((e) => EvaluatedRoute.fromJson(e as Map<String, dynamic>)).toList()
+          : const [],
     );
   }
 
@@ -326,6 +507,7 @@ class TripResponse {
       'estimatedDuration': estimatedDuration.inSeconds.toString(),
       'distanceKm': distanceKm,
       'traffic': traffic?.toJson(),
+      'routes': routes.map((e) => e.toJson()).toList(),
     };
   }
 }

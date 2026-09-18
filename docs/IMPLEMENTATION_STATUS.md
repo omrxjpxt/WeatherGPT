@@ -71,6 +71,24 @@
 - 🟢 **Flutter UI**: Trip Analysis screen renders the Traffic Conditions card with congestion badge, current travel time, free-flow time, delay pill, and data source provenance with graceful fallback for unavailable traffic.
 - 🟢 **Test Verification**: 59/59 backend pytest suite passing, 27/27 Flutter test suite passing, 0 issues on `flutter analyze`.
 
+## Phase 14: Route Alternative Evaluation (Complete)
+- 🟢 **Orchestration Layer**: Implemented `RouteEvaluator` (`backend/app/decision_engine/route_evaluator.py`) as a pure orchestrator that calls `DecisionEngine.evaluate_route_core` without duplicating decision engine or risk model formulas.
+- 🟢 **Strict 6-Step Deterministic Selection Policy**:
+  1. *Deadline Filtering*: Marks routes exceeding `arrival_deadline` as infeasible. If all violate, all are retained with `is_feasible = False`.
+  2. *Hard Alert Avoidance*: Distinguishes emergency closures/avoidance from advisories; excludes closed routes while retaining all routes under regional emergencies.
+  3. *Risk Tier Ordering*: Lower risk tier selected if tiers differ (`low < moderate < high < severe`).
+  4. *Large Score Difference ($\ge 15$)*: Lower risk score selected when in same tier.
+  5. *Small Score Difference ($< 15$)*: Shorter traffic-aware duration (effective travel time) selected for maximum traveler utility.
+  6. *Tie-Breaking*: Lower exposure score $\rightarrow$ shorter distance $\rightarrow$ lexicographical `route_id`.
+- 🟢 **N+1 Traffic Call Prevention**: Normalizes and reuses embedded traffic durations from providers like Google Routes; external `TrafficProvider` called only when data is missing.
+- 🟢 **Model Hygiene**: `routes: list[EvaluatedRoute] = Field(default_factory=list)` and `hazards: list[Hazard] = Field(default_factory=list)`. Full backward compatibility with omitted/empty `routes`.
+- 🟢 **Decoupled Frontend Inspection**: Backend `isSelected` provides the deterministic recommendation. Flutter `activeRouteId` tracks the route being viewed. Tapping an alternative does not mutate the recommendation or `isSelected`.
+- 🟢 **Flutter UI**: Route Alternatives card list with recommended badge, viewing indicator, time diffs, and rationale. Tested on iPhone 15 Pro and iPhone SE with zero overflow.
+- 🟢 **Test Verification**:
+  - Backend: **70/70 passing** (`pytest backend/tests`)
+  - Flutter: **30/30 passing** (`flutter test`)
+  - Analysis: **0 issues** (`flutter analyze`)
+
 ## Currently Pending
 - Connect production APIs upon user approval (verified Google Maps Traffic / TomTom, Gemini, Firestore).
 - iOS visual QA on physical device.
@@ -78,3 +96,4 @@
 ## Next Steps
 - Implement LLM Context / Assistant provider when credentials and scope are approved.
 - Connect production Firestore when persistence phase begins.
+

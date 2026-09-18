@@ -53,6 +53,51 @@ When traffic evaluation is active, the response includes a `traffic` object (`Tr
 **Duration Invariant:**
 `trafficAwareDuration = staticDuration + trafficDelay`. Traffic delay is applied exactly once to prevent double-counting. Base `TripResponse.estimatedDuration` remains the base static duration for legacy compatibility.
 
+#### Route Alternatives (`TripResponse.routes`)
+When multiple route alternatives are evaluated, `TripResponse.routes` contains the ranked candidate routes:
+`routes: List[EvaluatedRoute] = Field(default_factory=list)`
+
+Payloads that omit `routes` or provide an empty list are fully supported for 100% backward compatibility.
+
+**Model: `EvaluatedRoute`**
+- `routeId`: str (e.g. `"route_1"`)
+- `summary`: str (e.g. `"Via Noida-Greater Noida Expy"`)
+- `distanceKm`: float
+- `staticDuration`: ISO-8601 duration string
+- `polyline`: Optional[str]
+- `segments`: List[`RouteSegment`]
+- `traffic`: Optional[`TrafficSnapshot`]
+- `evaluation`: `RouteEvaluation`
+- `hazards`: List[`Hazard`] (Field default_factory=list)
+- `sourceName`: str
+- `provenance`: str
+- `risk`: Optional[`RiskAssessment`]
+
+**Model: `RouteEvaluation`**
+- `routeId`: str
+- `riskScore`: int (0-100)
+- `riskLevel`: `low` | `moderate` | `high` | `severe`
+- `staticDuration`: ISO-8601 duration string
+- `trafficAwareDuration`: ISO-8601 duration string
+- `trafficDelaySeconds`: float
+- `exposureScore`: float
+- `bottleneckScore`: int
+- `hazardCount`: int
+- `isFeasible`: bool
+- `feasibilityReason`: Optional[str]
+- `recommendationHeadline`: str
+- `recommendationBody`: str
+- `suggestedMode`: Optional[str]
+- `suggestedDepartureTime`: Optional[datetime]
+- `isSelected`: bool (Backend deterministic recommendation)
+- `selectionReason`: Optional[str] (Human-readable rationale explaining why this route was recommended or why an alternative differs)
+- `provenance`: str
+
+**Separation of Recommendation vs. Inspection:**
+- `isSelected = True` is set on exactly one route deterministically selected by the backend.
+- The Flutter client tracks `activeRouteId` locally for user inspection; tapping alternative cards does not mutate `isSelected` or the backend recommendation.
+
+
 ### 3. Scenarios
 `POST /scenarios/evaluate`
 **Request:** `EvaluateScenariosRequest` (request: TripRequest, departure_times: List[datetime])

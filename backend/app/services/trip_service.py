@@ -5,6 +5,7 @@ from typing import List, Tuple, Optional
 from app.models.trip import TripRequest, TripResponse, ModeOption, Recommendation, DataSource
 from app.models.enums import TransportMode
 from app.decision_engine.engine import DecisionEngine
+from app.decision_engine.route_evaluator import RouteEvaluator
 from app.decision_engine.normalized_models import TripContext, NormalizedHazard
 from app.providers.weather.base import WeatherProvider
 from app.providers.routing.base import RoutingProvider
@@ -35,6 +36,7 @@ class TripService:
         self.hazard_repository = hazard_repository
         
         self.engine = DecisionEngine()
+        self.route_evaluator = RouteEvaluator(self.engine)
         self._metro_provider = MockRoutingProvider()
 
     def _mock_geocode(self, location: str) -> Tuple[float, float]:
@@ -150,7 +152,6 @@ class TripService:
         
         try:
             routes = await active_routing_provider.get_route(origin_lat, origin_lng, dest_lat, dest_lng, request.mode)
-            route = routes[0]  # Take the primary route for the decision engine
             routing_status = active_routing_provider.route_status.value
         except Exception as e:
             from app.models.enums import TripStatus
@@ -168,112 +169,115 @@ class TripService:
                     DataSource(name=routing_provider_name, type="Routing [unavailable]", last_updated=datetime.now(timezone.utc)),
                 ],
                 estimated_duration=timedelta(0),
-                distance_km=0.0
-            )
-            
-        hazards = []
-        if self.hazard_repository:
-            try:
-                # Calculate rough bounding box from route segments
-                min_lat = min(min(seg.start_lat, seg.end_lat) for seg in route.segments)
-                max_lat = max(max(seg.start_lat, seg.end_lat) for seg in route.segments)
-                min_lng = min(min(seg.start_lng, seg.end_lng) for seg in route.segments)
-                max_lng = max(max(seg.start_lng, seg.end_lng) for seg in route.segments)
-                
-                # Expand bounding box slightly to catch nearby hazards (approx 0.05 degrees)
-                hazards = await self.hazard_repository.get_hazards_in_region(
-                    min_lat - 0.05, min_lng - 0.05,
-                    max_lat + 0.05, max_lng + 0.05
-                )
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Hazard repository failed: {e}")
-                hazards = []
-
-        # 1.5 Fetch Traffic Data
-        traffic = None
-        try:
-            traffic = await self.traffic_provider.get_traffic_for_route(route, request.departure_time, request.mode)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Traffic provider failed: {e}")
-            from app.models.enums import TrafficStatus, TrafficCondition, CongestionLevel
-            from app.models.traffic import TrafficSnapshot
-            traffic = TrafficSnapshot(
-                status=TrafficStatus.unavailable,
-                condition=TrafficCondition.unknown,
-                congestion_level=CongestionLevel.unknown,
-                delay_seconds=0.0,
-                static_duration=route.total_duration,
-                traffic_aware_duration=route.total_duration,
-                timestamp=datetime.now(timezone.utc),
-                source_name=self.traffic_provider.provider_name,
-                provenance="unavailable"
+                distance_km=0.0,
+                routes=[]
             )
 
-        # 2. Build Context
-        ctx = TripContext(
-            origin=request.origin,
-            destination=request.destination,
+        from app.models.enums import TrafficStatus, TrafficCondition, CongestionLevel
+        from app.models.traffic import TrafficSnapshot
+
+        evaluated_routes = []
+        for route in routes:
+            # 1. Fetch or reuse Traffic Data (Prevent N+1 calls: reuse route.traffic if already present)
+            traffic = None
+            if route.traffic is not None and route.traffic.status != TrafficStatus.unavailable:
+                traffic = route.traffic
+            else:
+                try:
+                    traffic = await self.traffic_provider.get_traffic_for_route(route, request.departure_time, request.mode)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Traffic provider failed for route {route.route_id}: {e}")
+                    traffic = TrafficSnapshot(
+                        status=TrafficStatus.unavailable,
+                        condition=TrafficCondition.unknown,
+                        congestion_level=CongestionLevel.unknown,
+                        delay_seconds=0.0,
+                        static_duration=route.total_duration,
+                        traffic_aware_duration=route.total_duration,
+                        timestamp=datetime.now(timezone.utc),
+                        source_name=self.traffic_provider.provider_name,
+                        provenance="unavailable"
+                    )
+
+            # 2. Corridor-independent hazards query
+            route_hazards = []
+            if self.hazard_repository and route.segments:
+                try:
+                    min_lat = min(min(seg.start_lat, seg.end_lat) for seg in route.segments)
+                    max_lat = max(max(seg.start_lat, seg.end_lat) for seg in route.segments)
+                    min_lng = min(min(seg.start_lng, seg.end_lng) for seg in route.segments)
+                    max_lng = max(max(seg.start_lng, seg.end_lng) for seg in route.segments)
+
+                    route_hazards = await self.hazard_repository.get_hazards_in_region(
+                        min_lat - 0.05, min_lng - 0.05,
+                        max_lat + 0.05, max_lng + 0.05
+                    )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Hazard repository failed for route {route.route_id}: {e}")
+                    route_hazards = []
+
+            # 3. Independent evaluation through decision engine
+            evaluated_route = self.route_evaluator.evaluate_route(
+                route=route,
+                request=request,
+                weather_timeline=comparison.primary_timeline,
+                hazards=route_hazards,
+                alerts=alerts,
+                traffic=traffic,
+                agreement_status=comparison.agreement_status.value
+            )
+            evaluated_routes.append(evaluated_route)
+
+        # 4. Deterministic selection & ranking
+        selected_route, ranked_routes = self.route_evaluator.select_and_rank_routes(
+            evaluated_routes,
             departure_time=request.departure_time,
-            mode=request.mode,
-            route=route,
-            weather_timeline=comparison.primary_timeline,
-            hazards=hazards,
-            alerts=alerts,
-            agreement_status=comparison.agreement_status.value,
-            traffic=traffic
+            arrival_deadline=request.arrival_deadline
         )
-        
-        # 3. Evaluate Engine
-        result = self.engine.evaluate(ctx)
-        
-        # 4. Mock alternative modes (in reality, run engine for each mode)
+
         mode_options = []
-        
         sources = [
             DataSource(name=self.weather_provider.provider_name, type="Weather (Primary)", last_updated=datetime.now(timezone.utc)),
             DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
             DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
         ]
 
-        if traffic:
+        if selected_route.traffic:
+            traffic = selected_route.traffic
             traffic_status_str = traffic.status.value if hasattr(traffic.status, "value") else str(traffic.status)
             sources.append(DataSource(name=traffic.source_name, type=f"Traffic [{traffic_status_str}]", last_updated=traffic.timestamp))
-        
+
         if self.secondary_weather_provider and comparison.secondary_timeline:
             sources.append(DataSource(name=self.secondary_weather_provider.provider_name, type="Weather (Secondary)", last_updated=datetime.now(timezone.utc)))
-            
+
         if self.secondary_alert_provider:
-             sources.append(DataSource(name=self.secondary_alert_provider.provider_name, type=f"Alerts [{self.secondary_alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)))
-             
+            sources.append(DataSource(name=self.secondary_alert_provider.provider_name, type=f"Alerts [{self.secondary_alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)))
+
+        suggested_mode = None
+        if selected_route.evaluation.suggested_mode:
+            try:
+                suggested_mode = TransportMode(selected_route.evaluation.suggested_mode)
+            except ValueError:
+                suggested_mode = None
+
         return TripResponse(
             analysis_id=analysis_id,
             request=request,
-            risk=result.overall_risk,
-            route=result.route_segments_with_weather,
+            risk=selected_route.risk,
+            route=selected_route.segments,
             recommendation=Recommendation(
-                headline=result.recommendation_headline,
-                body=result.recommendation_body,
-                suggested_mode=result.suggested_mode,
-                suggested_departure_time=result.suggested_time,
+                headline=selected_route.evaluation.recommendation_headline,
+                body=selected_route.evaluation.recommendation_body,
+                suggested_mode=suggested_mode,
+                suggested_departure_time=selected_route.evaluation.suggested_departure_time,
             ),
             mode_options=mode_options,
-            hazards=[
-                Hazard(
-                    id=th.hazard.id,
-                    type=th.hazard.type,
-                    title=th.hazard.id.replace('-', ' ').title(),
-                    description=f"{th.hazard.type.name} reported by {th.hazard.source_name}",
-                    lat=th.hazard.lat,
-                    lng=th.hazard.lng,
-                    severity=RiskLevel.moderate,
-                    reported_at=th.hazard.reported_timestamp,
-                    source=th.hazard.source_name
-                ) for th in result.hazards
-            ],
+            hazards=selected_route.hazards,
             sources=sources,
-            estimated_duration=result.total_duration,
-            distance_km=result.total_distance_km,
-            traffic=traffic
+            estimated_duration=selected_route.static_duration,
+            distance_km=selected_route.distance_km,
+            traffic=selected_route.traffic,
+            routes=ranked_routes
         )

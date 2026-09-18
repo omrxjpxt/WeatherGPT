@@ -306,6 +306,194 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('Trip Analysis renders Route Alternatives and manages activeRouteId vs backend recommendation', (tester) async {
+      final static1 = const Duration(minutes: 65);
+      final delay1 = const Duration(minutes: 12);
+      final traffic1 = TrafficSnapshot(
+        status: TrafficStatus.mock,
+        condition: TrafficCondition.congested,
+        congestionLevel: CongestionLevel.moderate,
+        delaySeconds: delay1.inSeconds.toDouble(),
+        staticDuration: static1,
+        trafficAwareDuration: static1 + delay1,
+        currentSpeedKmh: 35.0,
+        freeFlowSpeedKmh: 45.0,
+        timestamp: DateTime(2026, 8, 27, 8, 0),
+        sourceName: 'Mock Traffic Provider (Demo)',
+        provenance: 'demo/mock',
+      );
+
+      final static2 = const Duration(minutes: 56);
+      final delay2 = const Duration(minutes: 24);
+      final traffic2 = TrafficSnapshot(
+        status: TrafficStatus.mock,
+        condition: TrafficCondition.congested,
+        congestionLevel: CongestionLevel.heavy,
+        delaySeconds: delay2.inSeconds.toDouble(),
+        staticDuration: static2,
+        trafficAwareDuration: static2 + delay2,
+        currentSpeedKmh: 28.5,
+        freeFlowSpeedKmh: 45.0,
+        timestamp: DateTime(2026, 8, 27, 8, 0),
+        sourceName: 'Mock Traffic Provider (Demo)',
+        provenance: 'demo/mock',
+      );
+
+      final route1 = EvaluatedRoute(
+        routeId: 'route_1',
+        summary: 'Via Expressway',
+        distanceKm: 35.5,
+        staticDuration: static1,
+        traffic: traffic1,
+        sourceName: 'Mock Routing (Demo)',
+        provenance: 'demo/mock',
+        risk: const RiskAssessment(
+          overallScore: 42,
+          level: RiskLevel.moderate,
+          confidence: Confidence(level: ConfidenceLevel.high, explanation: 'High confidence'),
+          factors: [],
+          summary: 'Expressway corridor conditions',
+        ),
+        evaluation: RouteEvaluation(
+          routeId: 'route_1',
+          riskScore: 42,
+          riskLevel: RiskLevel.moderate,
+          staticDuration: static1,
+          trafficAwareDuration: static1 + delay1,
+          trafficDelaySeconds: delay1.inSeconds.toDouble(),
+          exposureScore: 16.8,
+          bottleneckScore: 40,
+          hazardCount: 1,
+          isFeasible: true,
+          recommendationHeadline: 'Expressway Route',
+          recommendationBody: 'Recommended deterministic path.',
+          isSelected: true,
+          selectionReason: 'Recommended: Moderate risk (42/100) with 77 min travel time (+12m traffic).',
+          provenance: 'demo/mock',
+        ),
+      );
+
+      final route2 = EvaluatedRoute(
+        routeId: 'route_2',
+        summary: 'Via DND Flyway',
+        distanceKm: 38.0,
+        staticDuration: static2,
+        traffic: traffic2,
+        sourceName: 'Mock Routing (Demo)',
+        provenance: 'demo/mock',
+        risk: const RiskAssessment(
+          overallScore: 48,
+          level: RiskLevel.moderate,
+          confidence: Confidence(level: ConfidenceLevel.high, explanation: 'High confidence'),
+          factors: [],
+          summary: 'Flyway corridor conditions',
+        ),
+        evaluation: RouteEvaluation(
+          routeId: 'route_2',
+          riskScore: 48,
+          riskLevel: RiskLevel.moderate,
+          staticDuration: static2,
+          trafficAwareDuration: static2 + delay2,
+          trafficDelaySeconds: delay2.inSeconds.toDouble(),
+          exposureScore: 21.6,
+          bottleneckScore: 65,
+          hazardCount: 2,
+          isFeasible: true,
+          recommendationHeadline: 'Flyway Route',
+          recommendationBody: 'Alternative path.',
+          isSelected: false,
+          selectionReason: '+6 higher risk score and 3 min slower effective travel time.',
+          provenance: 'demo/mock',
+        ),
+      );
+
+      final tripWithAlternatives = TripResponse(
+        analysisId: 'alternatives-test-1',
+        status: TripStatus.success,
+        request: TripRequest(
+          origin: 'Noida Sector 62',
+          destination: 'Gurgaon Cyber Hub',
+          departureTime: DateTime(2026, 8, 27, 8, 0),
+          mode: TransportMode.car,
+        ),
+        risk: route1.risk,
+        route: const [
+          RouteSegment(
+            startLat: 28.5355,
+            startLng: 77.3910,
+            endLat: 28.4595,
+            endLng: 77.0266,
+            riskLevel: RiskLevel.moderate,
+            description: 'Take Noida-Greater Noida Expy',
+          ),
+        ],
+        recommendation: const Recommendation(
+          headline: 'Via Expressway Recommended',
+          body: 'Optimal balance of safety and travel duration.',
+          alternativeAction: 'proceed',
+        ),
+        modeOptions: const [],
+        hazards: const [],
+        sources: [
+          DataSource(
+            name: 'Open-Meteo',
+            type: 'Weather',
+            lastUpdated: DateTime(2026, 8, 27, 8, 0),
+          ),
+        ],
+        estimatedDuration: static1,
+        distanceKm: 35.5,
+        traffic: traffic1,
+        routes: [route1, route2],
+      );
+
+      // Verify on iPhone SE screen (375x667)
+      await tester.binding.setSurfaceSize(const Size(375, 667));
+      await tester.pumpWidget(_buildTestApp(
+        screen: const TripAnalysisScreen(),
+        size: const Size(375, 667),
+        padding: const EdgeInsets.only(top: 20, bottom: 0),
+        overrides: [
+          tripResponseProvider.overrideWith((ref) => Future.value(tripWithAlternatives)),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // Scroll down to view Route Alternatives
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -350));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ROUTE ALTERNATIVES'), findsOneWidget);
+      expect(find.text('Via Expressway'), findsOneWidget);
+      expect(find.text('Via DND Flyway'), findsOneWidget);
+
+      // Initially route_1 is both RECOMMENDED and VIEWING
+      expect(find.text('RECOMMENDED'), findsOneWidget);
+      expect(find.text('VIEWING'), findsOneWidget);
+
+      // Tap on route_2 card to inspect it
+      final route2Finder = find.byKey(const Key('route_card_route_2'));
+      expect(route2Finder, findsOneWidget);
+      await tester.scrollUntilVisible(route2Finder, 100);
+      await tester.pumpAndSettle();
+      await tester.tap(route2Finder);
+      await tester.pumpAndSettle();
+
+      // After tap:
+      // 1. RECOMMENDED remains exactly 1, still on route_1
+      expect(find.text('RECOMMENDED'), findsOneWidget);
+      // 2. VIEWING is still present, now for route_2 (activeRouteId updated)
+      expect(find.text('VIEWING'), findsOneWidget);
+      // 3. Backend recommendation is untouched
+      expect(tripWithAlternatives.routes[0].evaluation.isSelected, isTrue);
+      expect(tripWithAlternatives.routes[1].evaluation.isSelected, isFalse);
+
+      // Verify no overflow error occurred
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('What-If Screen renders correctly without overflow on iPhone SE', (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 667));
       await tester.pumpWidget(_buildTestApp(

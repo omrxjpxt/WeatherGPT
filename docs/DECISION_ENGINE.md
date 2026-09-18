@@ -71,3 +71,46 @@ Where `hazard_influence_factor` is a configurable engineering assumption (defaul
 > **Engineering Assumption:** Open-Meteo returns hourly accumulation in `mm`. We use `precipitation_mm` as a proxy for intensity, scoring risk as a linear scalar `3.0 * precipitation_mm`, capped at 100. This is isolated and ready to be replaced with a scientifically supported threshold-based intensity model in the future.
 
 > **Visibility:** The engine uses explicit `visibility` (meters) returned by the provider. If `visibility < 1000m`, a moderate risk penalty is applied.
+
+---
+
+## 8. Route Alternative Evaluation & Deterministic Selection Policy
+
+The Route Alternative Evaluation engine evaluates all alternatives returned by the routing provider using the same deterministic decision engine (`DecisionEngine.evaluate_route_core`), avoiding heuristic fragmentation or duplicated scoring models.
+
+### Strict 6-Step Deterministic Selection Ordering
+
+Route alternatives are filtered, compared, and selected through an unambiguous, non-overlapping 6-step policy:
+
+1. **Arrival Deadline Filtering (Feasibility)**:
+   - Evaluates whether `departure_time + traffic_aware_duration <= arrival_deadline`.
+   - Routes violating `arrival_deadline` are marked `is_feasible = False` with an explicit `feasibility_reason`.
+   - If at least one route is feasible, infeasible routes are excluded from the active candidate pool.
+   - **All-Infeasible Fallback**: If *all* available routes violate the deadline, all routes are retained in the candidate pool with `is_feasible = False` rather than failing outright.
+
+2. **Alert Policy Differentiation (Hard Avoidance vs. Advisory)**:
+   - **Advisory / Warning Alerts**: General weather advisories and warnings inform raw risk scores and risk tiers without automatically disqualifying routes.
+   - **Hard Avoidance / Closures**: Applies strictly when an authoritative alert meets emergency severity or explicitly mandates avoidance, evacuation, halt, or closure (`is_hard_alert_avoidance`).
+   - If non-closure routes exist, routes covered by hard avoidance/closure orders are excluded from selection.
+   - **Regional Emergency Fallback**: If *all* routes face active emergency closure/avoidance, all routes are retained and marked with regional emergency warnings.
+
+3. **Risk Tier Comparison**:
+   - Compares risk levels hierarchically: `Low (1) < Moderate (2) < High (3) < Severe (4)`.
+   - If risk tiers differ, the route in the strictly lower risk tier is selected.
+
+4. **Same Risk Tier — Large Score Difference ($\ge 15$ points)**:
+   - If candidate routes occupy the same risk tier and $|\text{risk}_A - \text{risk}_B| \ge 15$, the route with the lower raw risk score is selected.
+
+5. **Same Risk Tier — Small Score Difference ($< 15$ points)**:
+   - If candidate routes occupy the same risk tier and $|\text{risk}_A - \text{risk}_B| < 15$, the system optimizes for traveler utility: the route with the shorter `traffic_aware_duration` (effective travel time) is selected.
+   - *Example*: Route A (22m static + 12m traffic = 34m, risk 42) vs. Route B (27m static + 2m traffic = 29m, risk 45). Both are Moderate tier, $|\Delta\text{risk}| = 3 < 15$. Route B is selected because travel time is 5 minutes faster (29m vs 34m).
+
+6. **Deterministic Tie-Breaking**:
+   - a. Lower exposure score.
+   - b. Shorter total distance (`distance_km`).
+   - c. Lexicographical comparison of `route_id` for absolute reproducibility.
+
+### Separation of Backend Recommendation and Frontend Inspection
+- **Backend `selectedRouteId`**: The deterministic route recommendation computed via the 6-step policy (`is_selected = True`).
+- **Frontend `activeRouteId`**: The route currently viewed/inspected by the user in Flutter. Tapping an alternative route updates `activeRouteId` for map/segment inspection but strictly never mutates `is_selected` or the backend recommendation.
+

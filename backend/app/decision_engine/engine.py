@@ -62,6 +62,12 @@ class DecisionEngine:
             
         return current_result
         
+    def evaluate_route_core(self, ctx: TripContext) -> EngineDecisionResult:
+        """
+        Public deterministic single-route evaluation using the core engine pipeline.
+        Orchestration layers (e.g. RouteEvaluator) invoke this without duplicating engine logic.
+        """
+        return self._evaluate_core(ctx)
 
     def _evaluate_core(self, ctx: TripContext) -> EngineDecisionResult:
         # 1. Temporal Alignment (accounts for traffic delay in passage time: Effect 1)
