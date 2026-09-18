@@ -16,7 +16,8 @@
 | **Mock Routing** | Routing | Demo | ✅ Complete `[DEMO]` | Used for fallback/demo transit paths. |
 | **Mock Traffic** | Traffic | Demo | ✅ Complete `[VERIFIED]` | Strictly deterministic mock provider with explicit demo/mock provenance. Free-flow on walk/metro, rush-hour delay for motorized modes. |
 | **TomTom/Google** | Traffic | Primary | ⏳ Planned | Live provider interface ready; awaiting verified production API credentials. |
-| **Gemini/Grok** | LLM | Context | ⏳ Pending | Not yet connected. |
+| **Mock LLM** | LLM | Demo | ✅ Complete `[VERIFIED]` | Pattern-based deterministic parser for English/Hindi/Hinglish; grounded natural language explanation generation with `GroundingValidator`. Explicit `demo/mock` provenance. |
+| **Gemini LLM** | LLM | Secondary | ✅ Complete `[VERIFIED ADAPTER]` | Full Google GenAI provider adapter ready; activates upon setting production API key. |
 
 ## Phase 1–5: Complete
 - **Phase 1 (Foundation):** Set up Flutter project, disabled code gen.
@@ -111,15 +112,34 @@
   - Flutter: **31/31 passing** (`flutter test`)
   - Analysis: **0 issues** (`flutter analyze`)
 
+## Phase 16: LLM Intent & Explanation Integration (Complete)
+- 🟢 **LLM Boundary & Zero Decision Authority**: Integrated LLM strictly as an interface and natural language translation layer. The LLM has zero authority over risk scoring, route selection, alert overrides, or feasibility evaluations.
+- 🟢 **Deterministic Grounding Validator (`GroundingValidator`)**: Implemented deterministic validator filtering explanation output against `DecisionFacts`. Rejects unsupported numerical claims (unsupported risk scores, invented traffic delays), invented route names, fabricated emergency alerts, or claims contradicting `TripStatus`. If rejected or malformed, a 100% grounded fallback explanation is automatically constructed from `DecisionFacts`.
+- 🟢 **Pydantic Model Hygiene**: Fixed all mutable list defaults across `DecisionFacts`, `AssistantChatResponse`, `RouteEvaluation`, etc. to use `Field(default_factory=list)` instead of bare `[]`.
+- 🟢 **Controlled User Intents**: Defined `UserIntentEnum` (`trip_decision`, `weather_question`, `route_comparison`, `what_if`, `alert_question`, `general_weather`). Non-trip intents (e.g. general weather queries) are handled cleanly without forcing execution through `TripService`.
+- 🟢 **Backend-Deterministic Clarification**: Intent completeness validation is strictly enforced by the backend (`AssistantService.validate_intent_completeness`). The LLM cannot declare an incomplete trip request valid. Missing fields trigger `status = "need_clarification"` with `trip_response = None` and no `TripService` execution.
+- 🟢 **Strict Response-State Semantics**:
+  - `need_clarification`: `trip_response = null`, no `TripService` execution.
+  - `success`: Authoritative `trip_response` attached.
+  - `degraded`: Provider limitations reflected (e.g. routing unavailable); no fabricated metrics.
+  - `error`: Clean error message; no fabricated trip result.
+- 🟢 **Mock Provider Transparency**: `MockLLMProvider` is labeled `provider_name = "Mock LLM Provider"` and `provenance = "demo/mock"`. Parsing for English, Hindi, and Hinglish is deterministic and bounded to documented patterns.
+- 🟢 **Provider Abstraction**: Decoupled `AssistantService` via abstract `LLMProvider`. Production `GeminiLLMProvider` is implemented using Google GenAI SDK and verified to raise configuration errors when keys are not set.
+- 🟢 **Unified Voice & Text Pipeline**: Text queries and voice transcripts flow through the identical pipeline: `User Text / Voice Transcript` $\rightarrow$ `AssistantService` $\rightarrow$ `ExtractedIntent` $\rightarrow$ `TripRequest` $\rightarrow$ `TripService` $\rightarrow$ `DecisionFacts` $\rightarrow$ `GroundingValidator` $\rightarrow$ grounded explanation.
+- 🟢 **Flutter Client Integration**: Connected `AssistantScreen` to `assistantRepositoryProvider`, handling loading states, grounded explanations, and dynamic "View Trip Analysis" navigation for successful trips. Updated `VoiceSessionNotifier` to use the unified assistant repository.
+- 🟢 **Test Verification**:
+  - Backend: **94/94 passing** (`pytest backend/tests`), including unit grounding tests and integration pipeline tests.
+  - Flutter: **34/34 passing** (`flutter test`), including iPhone SE and iPhone 15 Pro chat widget tests.
+  - Analysis: **0 issues** (`flutter analyze`).
+
 ## Currently Pending
-- Real credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`) and WeatherAPI (`WEATHERAPI_API_KEY`).
+- Production API credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
 - Production Traffic Provider (TomTom / Google Traffic).
 - Direct authoritative IMD CAP integration (pending government IP whitelisting).
-- Gemini / LLM contextual explanation integration.
 - Firestore persistence integration.
 
 ## Next Steps
-- Implement LLM Context / Assistant provider when credentials and scope are approved.
-- Connect production Firestore when persistence phase begins.
+- Implement Firestore persistence when requested.
+
 
 

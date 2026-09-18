@@ -15,6 +15,7 @@ from app.services.trip_service import TripService
 from app.services.scenario_service import ScenarioService
 from app.services.assistant_service import AssistantService
 from app.core.config import settings
+import os
 
 # Dependency Injection setup
 _mock_weather = MockWeatherProvider()
@@ -33,7 +34,12 @@ else:
 
 traffic_provider = MockTrafficProvider()
 alert_provider = MockAlertProvider()
-llm_provider = MockLLMProvider()
+
+if settings.llm_api_key or os.environ.get("GEMINI_API_KEY"):
+    from app.providers.llm.gemini import GeminiLLMProvider
+    llm_provider = GeminiLLMProvider()
+else:
+    llm_provider = MockLLMProvider()
 
 from app.repositories.mock_hazard_repository import MockHazardRepository
 
@@ -48,7 +54,7 @@ trip_service = TripService(
     hazard_repository=hazard_repository
 )
 scenario_service = ScenarioService(trip_service)
-assistant_service = AssistantService(llm_provider)
+assistant_service = AssistantService(llm_provider, trip_service=trip_service)
 
 def get_trip_service() -> TripService:
     return trip_service

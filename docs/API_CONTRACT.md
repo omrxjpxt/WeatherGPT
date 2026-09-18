@@ -157,8 +157,50 @@ Payloads that omit `routes` or provide an empty list are fully supported for 100
   - `contributionScore`: float
 
 ### 7. Assistant
-`POST /assistant/parse`
-**Request:** `AssistantParseRequest` (query: str)
-**Response:** `AssistantParseResponse` (intent, is_complete, missing_fields, clarification_prompt)
+Natural language understanding and grounded explanation endpoints. Both endpoints accept and return camelCase JSON.
+
+#### `POST /assistant/chat`
+Full end-to-end conversation pipeline: extracts intent, deterministically validates required trip fields, executes `TripService` (for trip decisions), compiles `DecisionFacts`, queries `LLMProvider.generate_explanation()`, validates grounding via `GroundingValidator`, and returns a grounded response.
+
+**Request:** `AssistantChatRequest`
+- `query`: str (User natural language query in English, Hindi, or Hinglish)
+- `conversationHistory`: List[dict] (Optional conversational context)
+- `referenceTime`: Optional[datetime] (Defaults to UTC now)
+
+**Response:** `AssistantChatResponse`
+- `message`: str (Accepted grounded natural language explanation or deterministic fallback)
+- `intent`: `ExtractedIntent`
+  - `userIntent`: `trip_decision` | `weather_question` | `route_comparison` | `what_if` | `alert_question` | `general_weather`
+  - `origin`: Optional[str]
+  - `destination`: Optional[str]
+  - `mode`: Optional[`TransportMode`] (`bike`, `car`, `metro`, `walk`)
+  - `departureTime`: Optional[datetime]
+  - `confidence`: float
+  - `rawEntities`: Dict[str, Any]
+- `tripRequest`: Optional[`TripRequest`] (Populated when intent is complete and valid)
+- `tripResponse`: Optional[`TripResponse`] (Authoritative decision engine response; `null` for `need_clarification` or non-trip intents)
+- `status`: `success` | `need_clarification` | `degraded` | `error`
+- `clarificationPrompt`: Optional[str] (Populated when `status == "need_clarification"`)
+- `provenance`: str (e.g. `"demo/mock"`, `"google/gemini-1.5-flash"`)
+
+**Response States:**
+- `need_clarification`: `tripResponse` is strictly `null`. `TripService` is not executed.
+- `success`: Authoritative `tripResponse` attached.
+- `degraded`: `tripResponse` present with degraded provider status (e.g. `routing_unavailable`); no fabricated metrics.
+- `error`: Clean error message; no fabricated trip result.
+
+#### `POST /assistant/parse`
+Lightweight intent extraction endpoint without executing trip analysis.
+
+**Request:** `AssistantParseRequest`
+- `query`: str
+- `referenceTime`: Optional[datetime]
+
+**Response:** `AssistantParseResponse`
+- `intent`: `ExtractedIntent`
+- `isComplete`: bool (Deterministic backend verification of required fields for `trip_decision`)
+- `missingFields`: List[str] (e.g. `["origin", "destination"]`)
+- `clarificationPrompt`: Optional[str]
 
 *Note: All JSON keys use `camelCase` to directly match the Flutter client models.*
+

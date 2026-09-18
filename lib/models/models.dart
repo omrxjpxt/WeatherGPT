@@ -998,3 +998,195 @@ Duration _parseDuration(String durationString) {
   }
   return const Duration(minutes: 0);
 }
+
+class ExtractedIntent {
+  final String? origin;
+  final String? destination;
+  final DateTime? departureTime;
+  final DateTime? arrivalDeadline;
+  final TransportMode? mode;
+  final String? tripDate;
+  final String userIntent;
+  final String? weatherConcern;
+  final List<String> scenarioModifiers;
+  final String rawQuery;
+
+  const ExtractedIntent({
+    this.origin,
+    this.destination,
+    this.departureTime,
+    this.arrivalDeadline,
+    this.mode,
+    this.tripDate,
+    this.userIntent = 'trip_decision',
+    this.weatherConcern,
+    this.scenarioModifiers = const [],
+    this.rawQuery = '',
+  });
+
+  factory ExtractedIntent.fromJson(Map<String, dynamic> json) {
+    return ExtractedIntent(
+      origin: json['origin'] as String?,
+      destination: json['destination'] as String?,
+      departureTime: json['departureTime'] != null
+          ? DateTime.parse(json['departureTime'] as String).toLocal()
+          : null,
+      arrivalDeadline: json['arrivalDeadline'] != null
+          ? DateTime.parse(json['arrivalDeadline'] as String).toLocal()
+          : null,
+      mode: json['mode'] != null
+          ? TransportMode.values.firstWhere(
+              (e) => e.name == json['mode'],
+              orElse: () => TransportMode.car,
+            )
+          : null,
+      tripDate: json['tripDate'] as String?,
+      userIntent: json['userIntent'] as String? ?? 'trip_decision',
+      weatherConcern: json['weatherConcern'] as String?,
+      scenarioModifiers: json['scenarioModifiers'] != null
+          ? (json['scenarioModifiers'] as List).map((e) => e as String).toList()
+          : const [],
+      rawQuery: json['rawQuery'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'origin': origin,
+      'destination': destination,
+      'departureTime': departureTime?.toUtc().toIso8601String(),
+      'arrivalDeadline': arrivalDeadline?.toUtc().toIso8601String(),
+      'mode': mode?.name,
+      'tripDate': tripDate,
+      'userIntent': userIntent,
+      'weatherConcern': weatherConcern,
+      'scenarioModifiers': scenarioModifiers,
+      'rawQuery': rawQuery,
+    };
+  }
+}
+
+class AssistantParseResponse {
+  final ExtractedIntent intent;
+  final bool isComplete;
+  final List<String> missingFields;
+  final String? clarificationPrompt;
+
+  const AssistantParseResponse({
+    required this.intent,
+    required this.isComplete,
+    this.missingFields = const [],
+    this.clarificationPrompt,
+  });
+
+  factory AssistantParseResponse.fromJson(Map<String, dynamic> json) {
+    return AssistantParseResponse(
+      intent: ExtractedIntent.fromJson(json['intent'] as Map<String, dynamic>),
+      isComplete: json['isComplete'] as bool? ?? false,
+      missingFields: json['missingFields'] != null
+          ? (json['missingFields'] as List).map((e) => e as String).toList()
+          : const [],
+      clarificationPrompt: json['clarificationPrompt'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'intent': intent.toJson(),
+      'isComplete': isComplete,
+      'missingFields': missingFields,
+      'clarificationPrompt': clarificationPrompt,
+    };
+  }
+}
+
+class AssistantChatRequest {
+  final String message;
+  final String? contextOrigin;
+  final String? contextDestination;
+  final String? contextMode;
+  final DateTime? contextTime;
+
+  const AssistantChatRequest({
+    required this.message,
+    this.contextOrigin,
+    this.contextDestination,
+    this.contextMode,
+    this.contextTime,
+  });
+
+  factory AssistantChatRequest.fromJson(Map<String, dynamic> json) {
+    return AssistantChatRequest(
+      message: json['message'] as String? ?? '',
+      contextOrigin: json['contextOrigin'] as String?,
+      contextDestination: json['contextDestination'] as String?,
+      contextMode: json['contextMode'] as String?,
+      contextTime: json['contextTime'] != null
+          ? DateTime.parse(json['contextTime'] as String).toLocal()
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'contextOrigin': contextOrigin,
+      'contextDestination': contextDestination,
+      'contextMode': contextMode,
+      'contextTime': contextTime?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class AssistantChatResponse {
+  final String message;
+  final ExtractedIntent intent;
+  final TripRequest? tripRequest;
+  final TripResponse? tripResponse;
+  final String status;
+  final String? clarificationPrompt;
+  final String provenance;
+  final bool groundingFallbackUsed;
+
+  const AssistantChatResponse({
+    required this.message,
+    required this.intent,
+    this.tripRequest,
+    this.tripResponse,
+    required this.status,
+    this.clarificationPrompt,
+    this.provenance = 'demo/mock',
+    this.groundingFallbackUsed = false,
+  });
+
+  factory AssistantChatResponse.fromJson(Map<String, dynamic> json) {
+    return AssistantChatResponse(
+      message: json['message'] as String? ?? '',
+      intent: ExtractedIntent.fromJson(json['intent'] as Map<String, dynamic>),
+      tripRequest: json['tripRequest'] != null
+          ? TripRequest.fromJson(json['tripRequest'] as Map<String, dynamic>)
+          : null,
+      tripResponse: json['tripResponse'] != null
+          ? TripResponse.fromJson(json['tripResponse'] as Map<String, dynamic>)
+          : null,
+      status: json['status'] as String? ?? 'success',
+      clarificationPrompt: json['clarificationPrompt'] as String?,
+      provenance: json['provenance'] as String? ?? 'demo/mock',
+      groundingFallbackUsed: json['groundingFallbackUsed'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'intent': intent.toJson(),
+      'tripRequest': tripRequest?.toJson(),
+      'tripResponse': tripResponse?.toJson(),
+      'status': status,
+      'clarificationPrompt': clarificationPrompt,
+      'provenance': provenance,
+      'groundingFallbackUsed': groundingFallbackUsed,
+    };
+  }
+}
+

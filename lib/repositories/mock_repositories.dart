@@ -632,3 +632,53 @@ class MockHistoryRepository implements HistoryRepository {
     ];
   }
 }
+
+class MockAssistantRepository implements AssistantRepository {
+  @override
+  Future<AssistantChatResponse> chat(AssistantChatRequest request) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final tripRepo = MockTripRepository();
+    final tripReq = TripRequest(
+      origin: request.contextOrigin ?? 'Noida Sector 62',
+      destination: request.contextDestination ?? 'Gurgaon Cyber Hub',
+      departureTime: request.contextTime ?? DateTime.now().add(const Duration(minutes: 15)),
+      mode: TransportMode.bike,
+    );
+    final tripRes = await tripRepo.analyzeTrip(tripReq);
+    final intent = ExtractedIntent(
+      origin: tripReq.origin,
+      destination: tripReq.destination,
+      departureTime: tripReq.departureTime,
+      mode: tripReq.mode,
+      userIntent: 'trip_decision',
+      rawQuery: request.message,
+    );
+    return AssistantChatResponse(
+      message: 'Based on current conditions from Open-Meteo, taking bike via ${tripRes.routes.isNotEmpty ? tripRes.routes.first.summary : "Primary Route"} has a risk score of ${tripRes.risk?.overallScore ?? 25}/100. ${tripRes.recommendation?.headline ?? "Commute advisory"}.',
+      intent: intent,
+      tripRequest: tripReq,
+      tripResponse: tripRes,
+      status: 'success',
+      provenance: 'demo/mock',
+    );
+  }
+
+  @override
+  Future<AssistantParseResponse> parseIntent(String query, {DateTime? referenceTime}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final intent = ExtractedIntent(
+      origin: 'Noida Sector 62',
+      destination: 'Gurgaon Cyber Hub',
+      departureTime: referenceTime ?? DateTime.now().add(const Duration(minutes: 15)),
+      mode: TransportMode.bike,
+      userIntent: 'trip_decision',
+      rawQuery: query,
+    );
+    return AssistantParseResponse(
+      intent: intent,
+      isComplete: true,
+      missingFields: const [],
+    );
+  }
+}
+

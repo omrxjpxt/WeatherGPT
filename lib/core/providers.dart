@@ -6,6 +6,7 @@ import '../repositories/http/http_trip_repository.dart';
 import '../repositories/http/http_weather_repository.dart';
 import '../repositories/http/http_risk_repository.dart';
 import '../repositories/http/http_alert_repository.dart';
+import '../repositories/http/http_assistant_repository.dart';
 import 'api/api_config.dart';
 import 'api/api_client.dart';
 
@@ -47,6 +48,13 @@ final alertRepositoryProvider = Provider<AlertRepository>((ref) {
 final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
   // History is always mock for now since there's no backend for it in this MVP
   return MockHistoryRepository();
+});
+
+final assistantRepositoryProvider = Provider<AssistantRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpAssistantRepository(ref.read(apiClientProvider));
+  }
+  return MockAssistantRepository();
 });
 
 // ── Trip State ──
@@ -180,17 +188,34 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
     state = state.copyWith(isListening: false);
   }
 
-  void simulateTranscript(String text) {
-    state = state.copyWith(
-      isListening: false,
-      transcript: text,
-      extractedTrip: TripRequest(
-        origin: 'Noida Sector 62',
-        destination: 'College (DTU)',
-        departureTime: DateTime(2026, 8, 28, 8, 0),
-        mode: TransportMode.bike,
-      ),
+  Future<void> simulateTranscript(String text) async {
+    state = state.copyWith(isListening: false, transcript: text);
+    try {
+      final repo = ref.read(assistantRepositoryProvider);
+      final res = await repo.parseIntent(text);
+      if (res.isComplete && res.intent.origin != null && res.intent.destination != null) {
+        final req = TripRequest(
+          origin: res.intent.origin!,
+          destination: res.intent.destination!,
+          departureTime: res.intent.departureTime ?? DateTime(2026, 8, 28, 8, 0),
+          mode: res.intent.mode ?? TransportMode.bike,
+        );
+        state = state.copyWith(extractedTrip: req);
+        ref.read(activeTripRequestProvider.notifier).update(req);
+        return;
+      }
+    } catch (_) {
+      // Fallback
+    }
+
+    final fallbackReq = TripRequest(
+      origin: 'Noida Sector 62',
+      destination: 'College (DTU)',
+      departureTime: DateTime(2026, 8, 28, 8, 0),
+      mode: TransportMode.bike,
     );
+    state = state.copyWith(extractedTrip: fallbackReq);
+    ref.read(activeTripRequestProvider.notifier).update(fallbackReq);
   }
 
   void reset() {

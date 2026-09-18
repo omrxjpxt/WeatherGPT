@@ -40,3 +40,9 @@ abstract class HistoryRepository {
     DateTime? endDate,
   });
 }
+
+abstract class AssistantRepository {
+  Future<AssistantChatResponse> chat(AssistantChatRequest request);
+  Future<AssistantParseResponse> parseIntent(String query, {DateTime? referenceTime});
+}
+
