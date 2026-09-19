@@ -17,4 +17,4 @@ class ScenarioResult(WeatherBaseModel):
     risk: Optional[RiskAssessment] = None
     estimated_duration: timedelta
     recommendation: Optional[str] = None
-    changed_factors: List[RiskFactor] = []
+    changed_factors: List[RiskFactor] = Field(default_factory=list)

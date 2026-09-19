@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
-from pydantic import model_validator
+from pydantic import model_validator, Field
 
 from app.models.base import WeatherBaseModel
 from app.models.enums import CongestionLevel, TrafficStatus, TrafficCondition
@@ -24,7 +24,7 @@ class TrafficSnapshot(WeatherBaseModel):
     traffic_aware_duration: timedelta
     current_speed_kmh: Optional[float] = None
     free_flow_speed_kmh: Optional[float] = None
-    segments: List[TrafficSegment] = []
+    segments: List[TrafficSegment] = Field(default_factory=list)
     timestamp: datetime
     source_name: str
     provenance: str

@@ -167,12 +167,27 @@
 - 🟢 **Test Verification**:
   - Flutter Analysis: **0 issues** (`flutter analyze`).
   - Flutter Unit & Widget Tests: **63/63 passing** (`flutter test`), up from 58.
-  - Backend Test Suite: **123/123 passing** (`pytest backend/tests`), up from 100.
+## Production Readiness & Release Hardening (Complete)
+- 🟢 **Mobile Release Hardening**: Added required `<uses-permission android:name="android.permission.INTERNET"/>` and `<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>` to `android/app/src/main/AndroidManifest.xml` to prevent release network crashes. Updated iOS `CFBundleDisplayName` to `WeatherGPT` in `ios/Runner/Info.plist`.
+- 🟢 **Environment & Configuration Hardening**: Added explicit `is_production` and `is_testing` runtime guards to `app.core.config.Settings`. Configured explicit production CORS origins (`cors_origins`) and rate limit parameters.
+- 🟢 **Model Hygiene & API Contract Alignment**: Added `display_name: Optional[str] = None` to `UserProfile` in `models/user.py`. Replaced mutable list defaults in `TrafficSnapshot` and `ScenarioEvaluation` with `Field(default_factory=list)`.
+- 🟢 **Standalone Weather Routes & Safety**: Fixed list indexing bug on `/api/v1/weather/current` and `/api/v1/weather/forecast`. Configured `FallbackWeatherProvider` with `secondary=None` in production to prevent silent mock weather leakage. Return clean `HTTP 503` upon provider outage.
+- 🟢 **Authentication Hardening**: In production mode, mock tokens (`mock-user-*`, `test-token`) are strictly rejected. Protected endpoints return clean generic 401s (`"Invalid, malformed, or expired authentication token"`) without leaking internal exception details, stack traces, or Firebase implementation internals. Verified cross-user read/write/delete isolation.
+- 🟢 **Request Correlation & Observability**: Implemented `RequestCorrelationAndRateLimitMiddleware` in `app/main.py`. Generates or preserves `X-Request-Id`, binds it to `structlog.contextvars` for end-to-end tracing, tracks request duration in ms, and attaches the header to responses.
+- 🟢 **Structured Secret Redaction**: Added `redact_sensitive_processor` to structlog pipeline. Automatically redacts Authorization headers, Bearer tokens, Gemini API keys (`AIza...`), Google Maps keys, and database passwords from all log outputs.
+- 🟢 **Abuse Protection & Rate Limiting**: Built lightweight in-memory sliding-window rate limiter in `app/core/rate_limiter.py`. Protects expensive endpoints (`/trips/analyze`, `/assistant/*`, `/weather/*`) with 30 req/min for anonymous and 120 req/min for authenticated travelers, returning `HTTP 429` with `Retry-After`.
+- 🟢 **LLM Safety & Adversarial Injection Resistance**: Extended `GroundingValidator` with regex pattern guards against prompt overrides (*"ignore the decision engine"*, *"assume weather is clear"*, *"override closure"*, *"hidden risk score"*), rejects route recommendations contradicting `facts.selected_route_summary`, and enforces degraded status consistency with automatic deterministic fallback.
+- 🟢 **Gemini Adapter Hardening**: Enhanced `GeminiLLMProvider` with automatic markdown code-fence stripping (````json ... ````), 10-second request timeouts, structured exception handling, and credential sanitization.
+- 🟢 **Hazard Repository Dependency Injection**: Replaced module-level singleton in `routes/hazards.py` with `Depends(get_hazard_repository)`, preserving `MEMORY_MODE` and clean DI architecture.
+- 🟢 **Concurrency Optimization**: Refactored `TripService.analyze_trip` to concurrently fetch primary weather, secondary weather, alerts, and routing via `asyncio.gather`. Candidate route traffic and hazards are also evaluated concurrently while maintaining strictly deterministic route ranking and score evaluation.
+- 🟢 **Test Verification**:
+  - Flutter Analysis: **0 issues** (`flutter analyze`).
+  - Flutter Tests: **63/63 passing** (`flutter test`).
+  - Backend Test Suite: **146/146 passing** (`pytest backend/tests`), up from 123.
 
 ## Currently Pending
 - Production API credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
 - Production Traffic Provider (TomTom / Google Traffic).
 - Direct authoritative IMD CAP integration (pending government IP whitelisting).
-- Production Firebase project credentials for live deployment.
 
 

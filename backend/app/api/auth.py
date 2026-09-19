@@ -32,13 +32,16 @@ async def get_optional_current_user(request: Request) -> Optional[dict]:
         return None
 
     from app.core.config import settings
-    if settings.environment == "test" or not settings.firestore_project_id:
-        if token == "test-token":
-            return {"uid": "test-user-id", "email": "test@example.com"}
-        if token.startswith("mock-user-") or token.startswith("mock-uid-") or token.startswith("user-"):
-            return {"uid": token, "email": f"{token}@example.com"}
-        if token in ("expired-token", "malformed-token", "invalid-token"):
-            return None
+
+    # In production, mock tokens are strictly forbidden under all circumstances
+    if not settings.is_production:
+        if settings.is_testing or not settings.firestore_project_id:
+            if token == "test-token":
+                return {"uid": "test-user-id", "email": "test@example.com"}
+            if token.startswith("mock-user-") or token.startswith("mock-uid-") or token.startswith("user-"):
+                return {"uid": token, "email": f"{token}@example.com"}
+            if token in ("expired-token", "malformed-token", "invalid-token"):
+                return None
 
     try:
         decoded_token = auth.verify_id_token(token)
@@ -52,6 +55,7 @@ async def get_authenticated_user(request: Request) -> dict:
     """
     Strict authentication dependency for protected endpoints (/users/me/*).
     Raises HTTPException(401) on missing, malformed, or expired tokens.
+    Production responses are completely sanitized to prevent exception/stack leakage.
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -79,23 +83,26 @@ async def get_authenticated_user(request: Request) -> dict:
     token = parts[1].strip()
 
     from app.core.config import settings
-    if settings.environment == "test" or not settings.firestore_project_id:
-        if token == "expired-token":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        if token in ("malformed-token", "invalid-token"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Malformed or invalid authentication token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        if token == "test-token":
-            return {"uid": "test-user-id", "email": "test@example.com"}
-        if token.startswith("mock-user-") or token.startswith("mock-uid-") or token.startswith("user-"):
-            return {"uid": token, "email": f"{token}@example.com"}
+
+    # In production, mock tokens are strictly forbidden under all circumstances
+    if not settings.is_production:
+        if settings.is_testing or not settings.firestore_project_id:
+            if token == "expired-token":
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid, malformed, or expired authentication token",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if token in ("malformed-token", "invalid-token"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid, malformed, or expired authentication token",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if token == "test-token":
+                return {"uid": "test-user-id", "email": "test@example.com"}
+            if token.startswith("mock-user-") or token.startswith("mock-uid-") or token.startswith("user-"):
+                return {"uid": token, "email": f"{token}@example.com"}
 
     try:
         decoded_token = auth.verify_id_token(token)
@@ -104,7 +111,7 @@ async def get_authenticated_user(request: Request) -> dict:
         logger.error(f"Error verifying Firebase token: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired authentication token: {e}",
+            detail="Invalid, malformed, or expired authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

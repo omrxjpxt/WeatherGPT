@@ -1,5 +1,7 @@
 import os
+import re
 import json
+import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -13,6 +15,7 @@ class GeminiLLMProvider(LLMProvider):
     Google Gemini LLM Provider adapter.
     Implements structured intent extraction and grounded explanation generation.
     Cleanly separates provider SDK interactions from domain services.
+    Enforces strict timeouts, markdown code fence stripping, and exception safety.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -31,6 +34,7 @@ class GeminiLLMProvider(LLMProvider):
     async def extract_intent(self, text: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
         """
         Extract structured intent using Gemini API with structured JSON output.
+        Enforces 10-second timeout, code-fence removal, and schema defaults.
         """
         try:
             import google.generativeai as genai
@@ -54,14 +58,37 @@ class GeminiLLMProvider(LLMProvider):
                 "}\n"
                 "Do not hallucinate or invent missing fields. If a field is not specified, return null."
             )
-            response = await model.generate_content_async(prompt)
-            return json.loads(response.text)
+            response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=10.0)
+            if not response or not hasattr(response, "text") or not response.text:
+                raise ValueError("Gemini returned an empty response")
+
+            clean_text = response.text.strip()
+            if clean_text.startswith("```"):
+                clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text, flags=re.IGNORECASE)
+                clean_text = re.sub(r"\s*```$", "", clean_text)
+
+            data = json.loads(clean_text)
+            if not isinstance(data, dict):
+                raise ValueError("Gemini response is not a valid JSON dictionary")
+
+            data.setdefault("raw_query", text)
+            data.setdefault("user_intent", "trip_decision")
+            data.setdefault("scenario_modifiers", [])
+            return data
+        except asyncio.TimeoutError:
+            raise RuntimeError("Gemini API call timed out after 10 seconds")
+        except json.JSONDecodeError as jde:
+            raise RuntimeError(f"Gemini returned invalid JSON: {jde}")
         except Exception as e:
-            raise RuntimeError(f"Gemini intent extraction failed: {str(e)}")
+            err_msg = str(e)
+            if self._api_key:
+                err_msg = err_msg.replace(self._api_key, "[REDACTED]")
+            raise RuntimeError(f"Gemini intent extraction failed: {err_msg}")
 
     async def generate_explanation(self, decision_facts: Dict[str, Any]) -> str:
         """
         Generate grounded explanation using Gemini API, strictly adhering to decision facts.
+        Enforces 10-second timeout, code-fence removal, and error redaction.
         """
         try:
             import google.generativeai as genai
@@ -79,7 +106,19 @@ class GeminiLLMProvider(LLMProvider):
                 "Be concise, friendly, and transparent about data limitations."
             )
             prompt = f"{system_instruction}\n\nDecision Facts:\n{json.dumps(decision_facts, default=str)}"
-            response = await model.generate_content_async(prompt)
-            return response.text.strip()
+            response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=10.0)
+            if not response or not hasattr(response, "text") or not response.text:
+                raise ValueError("Gemini returned an empty explanation")
+
+            clean_text = response.text.strip()
+            if clean_text.startswith("```"):
+                clean_text = re.sub(r"^```(?:markdown|text)?\s*", "", clean_text, flags=re.IGNORECASE)
+                clean_text = re.sub(r"\s*```$", "", clean_text)
+            return clean_text
+        except asyncio.TimeoutError:
+            raise RuntimeError("Gemini explanation generation timed out after 10 seconds")
         except Exception as e:
-            raise RuntimeError(f"Gemini explanation generation failed: {str(e)}")
+            err_msg = str(e)
+            if self._api_key:
+                err_msg = err_msg.replace(self._api_key, "[REDACTED]")
+            raise RuntimeError(f"Gemini explanation generation failed: {err_msg}")

@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     # Feature Flags
     demo_mode: bool = False
 
+    # CORS Configuration
+    cors_origins: list[str] = [
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:8000",
+        "http://10.0.2.2:8000",
+    ]
+
+    # Rate Limiting
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute_anonymous: int = 30
+    rate_limit_per_minute_authenticated: int = 120
+
     # Source Comparison Thresholds
     temperature_diff_threshold_c: float = 5.0
     precipitation_diff_threshold_mm: float = 5.0
@@ -32,6 +45,14 @@ class Settings(BaseSettings):
     
     # Hazard Influence Factor (Engineering Assumption)
     hazard_influence_factor: float = 0.5
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
+
+    @property
+    def is_testing(self) -> bool:
+        return self.environment.lower() == "test"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

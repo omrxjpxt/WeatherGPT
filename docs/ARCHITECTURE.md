@@ -72,8 +72,13 @@ The deterministic Decision Engine remains the sole authority for:
 
 ### 7. Persistence Failure Isolation & Production Hardening
 - Background write tasks (`_safe_persist`, `_safe_save_message`) are error-isolated. Database timeouts or Firestore connection drops never block, delay, or modify live user responses.
-- Protected endpoints strictly enforce HTTP 401 on missing or invalid tokens, while token UID verification (`profile.uid = uid`) guarantees zero cross-user tampering.
+- Protected endpoints strictly enforce HTTP 401 with generic sanitized messages on missing, expired, or malformed tokens. Mock tokens are strictly rejected in production environments.
+- Token UID verification (`profile.uid = uid`) guarantees zero cross-user tampering.
 - Upstream provider degradation (routing, weather, traffic, hazards, LLM) gracefully produces typed degraded responses without hallucinating safety data or throwing 500 errors.
+- End-to-end request correlation via `X-Request-Id` ASGI middleware and structured structlog context.
+- Automatic secret redaction prevents Bearer tokens, API keys, and credentials from being logged.
+- Sliding-window rate limiting protects expensive APIs with HTTP 429 and `Retry-After`.
+- Mobile release packaging provides clean release manifests (Android INTERNET permissions) and display name configuration.
 
 ---
 
@@ -81,5 +86,5 @@ The deterministic Decision Engine remains the sole authority for:
 
 - **Flutter Analyze:** 0 issues
 - **Flutter Test Suite:** 63/63 tests passing
-- **Backend Test Suite:** 123/123 tests passing
+- **Backend Test Suite:** 146/146 tests passing
 

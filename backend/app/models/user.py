@@ -6,6 +6,7 @@ from app.models.base import WeatherBaseModel
 class UserProfile(WeatherBaseModel):
     uid: str
     email: Optional[str] = None
+    display_name: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -260,3 +260,43 @@ Returns the full `TripResponse` snapshot.
 - `title`: str
 - `createdAt`: datetime
 
+
+### 9. Weather
+Direct weather observation and forecast endpoints.
+
+`GET /weather/current?lat={lat}&lng={lng}`
+**Response:** `WeatherPoint`
+- `time`: ISO-8601 datetime
+- `temperature`: float
+- `precipitationMm`: float
+- `humidity`: int
+- `windSpeed`: float
+- `windGusts`: Optional[float]
+- `visibility`: Optional[float]
+- `condition`: str
+- `icon`: str
+
+`GET /weather/forecast?lat={lat}&lng={lng}&hours={hours}`
+**Response:** `List[WeatherPoint]`
+
+*Failure Behavior:* If weather data is unavailable, these endpoints return `HTTP 503 Service Unavailable` with `{"detail": "Weather service is currently unavailable"}`. No synthetic or mock weather is ever returned in production.
+
+---
+
+## Global Request Correlation & Rate Limiting
+
+### Request Tracing (`X-Request-Id`)
+Every incoming HTTP request accepts an optional `X-Request-Id` header. If absent, the backend generates a UUID4 identifier. This identifier is:
+- Returned in the response header `X-Request-Id`
+- Bound to `structlog.contextvars` across the request lifecycle
+- Included in all server-side structured logs and error payloads (`{"requestId": "..."}`)
+
+### Rate Limiting & Abuse Protection
+Expensive endpoints (`/trips/analyze`, `/assistant/*`, `/weather/*`) are protected by an in-memory sliding-window rate limiter:
+- **Anonymous Travelers:** 30 requests / minute (keyed by client IP)
+- **Authenticated Travelers:** 120 requests / minute (keyed by verified token prefix)
+- **Breach Response:** `HTTP 429 Too Many Requests`
+  ```json
+  {"detail": "Rate limit exceeded. Please try again later."}
+  ```
+  Accompanied by the standard `Retry-After: {seconds}` header. CORS preflight (`OPTIONS`) requests are never rate-limited.

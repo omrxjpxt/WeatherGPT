@@ -21,7 +21,9 @@ import os
 _mock_weather = MockWeatherProvider()
 if settings.weather_provider == "open-meteo":
     _open_meteo = OpenMeteoWeatherProvider()
-    weather_provider = FallbackWeatherProvider(primary=_open_meteo, secondary=_mock_weather)
+    # In production, NEVER silently substitute mock weather
+    _secondary = None if settings.is_production else (_mock_weather if settings.demo_mode else None)
+    weather_provider = FallbackWeatherProvider(primary=_open_meteo, secondary=_secondary)
 else:
     weather_provider = _mock_weather
 
@@ -96,3 +98,6 @@ def get_user_repository() -> FirestoreUserRepository:
 
 def get_conversation_repository() -> FirestoreConversationRepository:
     return conversation_repository
+
+def get_hazard_repository() -> MockHazardRepository:
+    return hazard_repository

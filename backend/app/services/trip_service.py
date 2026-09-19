@@ -84,8 +84,8 @@ class TripService:
             
         import asyncio
         from app.decision_engine.source_comparison import compare_weather_sources
-        
-        # We wrap in exceptions to ensure isolated failure
+
+        # 1. Concurrently fetch independent upstream provider data
         async def fetch_primary_weather():
             try:
                 return await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
@@ -93,7 +93,7 @@ class TripService:
                 import logging
                 logging.getLogger(__name__).error(f"Primary weather failed: {e}")
                 return None
-                
+
         async def fetch_secondary_weather():
             if not self.secondary_weather_provider:
                 return None
@@ -103,17 +103,17 @@ class TripService:
                 import logging
                 logging.getLogger(__name__).error(f"Secondary weather failed: {e}")
                 return None
-                
+
         async def fetch_alerts():
             alerts_gathered = []
-            
+
             async def _fetch_single(p):
                 if not p: return []
                 try:
                     return await p.get_active_alerts(origin_lat, origin_lng)
                 except Exception:
                     return []
-                    
+
             res = await asyncio.gather(
                 _fetch_single(self.alert_provider),
                 _fetch_single(self.secondary_alert_provider)
@@ -121,15 +121,29 @@ class TripService:
             alerts_gathered.extend(res[0])
             alerts_gathered.extend(res[1])
             return alerts_gathered
-            
-        weather_p, weather_s, raw_alerts = await asyncio.gather(
+
+        async def fetch_routing():
+            try:
+                routes = await active_routing_provider.get_route(
+                    origin_lat, origin_lng, dest_lat, dest_lng, request.mode
+                )
+                routing_status = active_routing_provider.route_status.value
+                return routes, routing_status, None
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Routing failed: {e}")
+                return None, "unavailable", e
+
+        # Execute weather, secondary weather, alerts, and routing in parallel
+        weather_p, weather_s, raw_alerts, (routes, routing_status, routing_err) = await asyncio.gather(
             fetch_primary_weather(),
             fetch_secondary_weather(),
-            fetch_alerts()
+            fetch_alerts(),
+            fetch_routing()
         )
-        
+
         comparison = compare_weather_sources(weather_p, weather_s)
-        
+
         # 1.1 If both weather sources are unavailable, fallback gracefully.
         if not comparison.primary_timeline:
             from app.models.enums import TripStatus
@@ -146,16 +160,13 @@ class TripService:
                 estimated_duration=timedelta(0),
                 distance_km=0.0
             )
-            
+
         # Fetch and evaluate alerts against WeatherGPT override policy
         alerts = self._evaluate_alert_policy(raw_alerts)
-        
+
         analysis_id = str(uuid.uuid4())
-        
-        try:
-            routes = await active_routing_provider.get_route(origin_lat, origin_lng, dest_lat, dest_lng, request.mode)
-            routing_status = active_routing_provider.route_status.value
-        except Exception as e:
+
+        if routes is None or routing_err is not None:
             from app.models.enums import TripStatus
             return TripResponse(
                 analysis_id=analysis_id,
@@ -178,9 +189,9 @@ class TripService:
         from app.models.enums import TrafficStatus, TrafficCondition, CongestionLevel
         from app.models.traffic import TrafficSnapshot
 
-        evaluated_routes = []
-        for route in routes:
-            # 1. Fetch or reuse Traffic Data (Prevent N+1 calls: reuse route.traffic if already present)
+        # 2. Concurrently evaluate traffic and hazards for candidate routes
+        async def evaluate_single_candidate(route):
+            # A. Traffic evaluation (reuse existing if present)
             traffic = None
             if route.traffic is not None and route.traffic.status != TrafficStatus.unavailable:
                 traffic = route.traffic
@@ -202,7 +213,7 @@ class TripService:
                         provenance="unavailable"
                     )
 
-            # 2. Corridor-independent hazards query
+            # B. Corridor hazards query
             route_hazards = []
             if self.hazard_repository and route.segments:
                 try:
@@ -220,8 +231,8 @@ class TripService:
                     logging.getLogger(__name__).error(f"Hazard repository failed for route {route.route_id}: {e}")
                     route_hazards = []
 
-            # 3. Independent evaluation through decision engine
-            evaluated_route = self.route_evaluator.evaluate_route(
+            # C. Independent evaluation through decision engine
+            return self.route_evaluator.evaluate_route(
                 route=route,
                 request=request,
                 weather_timeline=comparison.primary_timeline,
@@ -230,7 +241,9 @@ class TripService:
                 traffic=traffic,
                 agreement_status=comparison.agreement_status.value
             )
-            evaluated_routes.append(evaluated_route)
+
+        # Preserve deterministic route ordering with asyncio.gather
+        evaluated_routes = list(await asyncio.gather(*[evaluate_single_candidate(r) for r in routes]))
 
         # 4. Deterministic selection & ranking
         selected_route, ranked_routes = self.route_evaluator.select_and_rank_routes(
