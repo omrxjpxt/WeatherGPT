@@ -1106,6 +1106,7 @@ class AssistantChatRequest {
   final String? contextDestination;
   final String? contextMode;
   final DateTime? contextTime;
+  final String? conversationId;
 
   const AssistantChatRequest({
     required this.message,
@@ -1113,6 +1114,7 @@ class AssistantChatRequest {
     this.contextDestination,
     this.contextMode,
     this.contextTime,
+    this.conversationId,
   });
 
   factory AssistantChatRequest.fromJson(Map<String, dynamic> json) {
@@ -1124,16 +1126,18 @@ class AssistantChatRequest {
       contextTime: json['contextTime'] != null
           ? DateTime.parse(json['contextTime'] as String).toLocal()
           : null,
+      conversationId: json['conversationId'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'message': message,
-      'contextOrigin': contextOrigin,
-      'contextDestination': contextDestination,
-      'contextMode': contextMode,
-      'contextTime': contextTime?.toUtc().toIso8601String(),
+      if (contextOrigin != null) 'contextOrigin': contextOrigin,
+      if (contextDestination != null) 'contextDestination': contextDestination,
+      if (contextMode != null) 'contextMode': contextMode,
+      if (contextTime != null) 'contextTime': contextTime?.toUtc().toIso8601String(),
+      if (conversationId != null) 'conversationId': conversationId,
     };
   }
 }
@@ -1147,6 +1151,7 @@ class AssistantChatResponse {
   final String? clarificationPrompt;
   final String provenance;
   final bool groundingFallbackUsed;
+  final String? conversationId;
 
   const AssistantChatResponse({
     required this.message,
@@ -1157,6 +1162,7 @@ class AssistantChatResponse {
     this.clarificationPrompt,
     this.provenance = 'demo/mock',
     this.groundingFallbackUsed = false,
+    this.conversationId,
   });
 
   factory AssistantChatResponse.fromJson(Map<String, dynamic> json) {
@@ -1173,6 +1179,7 @@ class AssistantChatResponse {
       clarificationPrompt: json['clarificationPrompt'] as String?,
       provenance: json['provenance'] as String? ?? 'demo/mock',
       groundingFallbackUsed: json['groundingFallbackUsed'] as bool? ?? false,
+      conversationId: json['conversationId'] as String?,
     );
   }
 
@@ -1186,6 +1193,176 @@ class AssistantChatResponse {
       'clarificationPrompt': clarificationPrompt,
       'provenance': provenance,
       'groundingFallbackUsed': groundingFallbackUsed,
+      if (conversationId != null) 'conversationId': conversationId,
+    };
+  }
+}
+
+// ── User Persistence Models ──
+
+class UserProfile {
+  final String uid;
+  final String? email;
+  final String? displayName;
+  final DateTime createdAt;
+  final DateTime lastLoginAt;
+
+  UserProfile({
+    required this.uid,
+    this.email,
+    this.displayName,
+    DateTime? createdAt,
+    DateTime? lastLoginAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        lastLoginAt = lastLoginAt ?? DateTime.now();
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    return UserProfile(
+      uid: json['uid'] as String,
+      email: json['email'] as String?,
+      displayName: json['displayName'] as String?,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String).toLocal()
+          : DateTime.now(),
+      lastLoginAt: json['lastLoginAt'] != null
+          ? DateTime.parse(json['lastLoginAt'] as String).toLocal()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'uid': uid,
+      if (email != null) 'email': email,
+      if (displayName != null) 'displayName': displayName,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'lastLoginAt': lastLoginAt.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class SavedRoute {
+  final String id;
+  final String name;
+  final String originId;
+  final String destinationId;
+  final DateTime createdAt;
+
+  SavedRoute({
+    required this.id,
+    required this.name,
+    required this.originId,
+    required this.destinationId,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  factory SavedRoute.fromJson(Map<String, dynamic> json) {
+    return SavedRoute(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      originId: json['originId'] as String,
+      destinationId: json['destinationId'] as String,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String).toLocal()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'originId': originId,
+      'destinationId': destinationId,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class TripHistorySummary {
+  final String analysisId;
+  final String status;
+  final String origin;
+  final String destination;
+  final String mode;
+  final String? riskLevel;
+  final String? recommendationHeadline;
+  final DateTime createdAt;
+  final bool isSnapshot;
+
+  TripHistorySummary({
+    required this.analysisId,
+    required this.status,
+    required this.origin,
+    required this.destination,
+    required this.mode,
+    this.riskLevel,
+    this.recommendationHeadline,
+    required this.createdAt,
+    this.isSnapshot = true,
+  });
+
+  factory TripHistorySummary.fromJson(Map<String, dynamic> json) {
+    return TripHistorySummary(
+      analysisId: json['analysisId'] as String,
+      status: json['status'] as String? ?? 'success',
+      origin: json['origin'] as String,
+      destination: json['destination'] as String,
+      mode: json['mode'] as String,
+      riskLevel: json['riskLevel'] as String?,
+      recommendationHeadline: json['recommendationHeadline'] as String?,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String).toLocal()
+          : DateTime.now(),
+      isSnapshot: json['isSnapshot'] as bool? ?? true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'analysisId': analysisId,
+      'status': status,
+      'origin': origin,
+      'destination': destination,
+      'mode': mode,
+      if (riskLevel != null) 'riskLevel': riskLevel,
+      if (recommendationHeadline != null) 'recommendationHeadline': recommendationHeadline,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'isSnapshot': isSnapshot,
+    };
+  }
+}
+
+class ConversationSummary {
+  final String id;
+  final String tripId;
+  final String title;
+  final DateTime createdAt;
+
+  ConversationSummary({
+    required this.id,
+    required this.tripId,
+    required this.title,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  factory ConversationSummary.fromJson(Map<String, dynamic> json) {
+    return ConversationSummary(
+      id: json['id'] as String,
+      tripId: json['tripId'] as String,
+      title: json['title'] as String,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String).toLocal()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'tripId': tripId,
+      'title': title,
+      'createdAt': createdAt.toUtc().toIso8601String(),
     };
   }
 }

@@ -682,3 +682,119 @@ class MockAssistantRepository implements AssistantRepository {
   }
 }
 
+class MockUserRepository implements UserRepository {
+  UserProfile _profile = UserProfile(
+    uid: 'demo-user-id',
+    email: 'om@weathergpt.com',
+    displayName: 'Om Gangwar',
+  );
+
+  final List<SavedRoute> _savedRoutes = [
+    SavedRoute(
+      id: 'mock-route-1',
+      name: 'Home → Office',
+      originId: 'Noida Sector 62',
+      destinationId: 'Gurgaon Cyber Hub',
+      createdAt: DateTime.utc(2026, 8, 15),
+    ),
+    SavedRoute(
+      id: 'mock-route-2',
+      name: 'Home → DTU',
+      originId: 'Noida Sector 62',
+      destinationId: 'College (DTU)',
+      createdAt: DateTime.utc(2026, 8, 20),
+    ),
+  ];
+
+  final List<TripHistorySummary> _tripHistory = [
+    TripHistorySummary(
+      analysisId: 'mock-analysis-1',
+      status: 'success',
+      origin: 'Noida Sector 62',
+      destination: 'Gurgaon Cyber Hub',
+      mode: 'bike',
+      riskLevel: 'low',
+      recommendationHeadline: 'Clear route via Noida-Greater Noida Expy',
+      createdAt: DateTime.utc(2026, 9, 18, 9, 30),
+      isSnapshot: true,
+    ),
+    TripHistorySummary(
+      analysisId: 'mock-analysis-2',
+      status: 'success',
+      origin: 'Noida Sector 62',
+      destination: 'Delhi Tech University',
+      mode: 'car',
+      riskLevel: 'moderate',
+      recommendationHeadline: 'Moderate congestion near Ring Road',
+      createdAt: DateTime.utc(2026, 9, 17, 18, 15),
+      isSnapshot: true,
+    ),
+  ];
+
+  final List<ConversationSummary> _conversations = [
+    ConversationSummary(
+      id: 'mock-conv-1',
+      tripId: 'mock-analysis-1',
+      title: 'Commute to Gurgaon Cyber Hub',
+      createdAt: DateTime.utc(2026, 9, 18, 9, 25),
+    ),
+  ];
+
+  @override
+  Future<UserProfile> getProfile() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return _profile;
+  }
+
+  @override
+  Future<UserProfile> updateProfile(UserProfile profile) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    _profile = profile;
+    return _profile;
+  }
+
+  @override
+  Future<List<SavedRoute>> getSavedRoutes() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return List.unmodifiable(_savedRoutes);
+  }
+
+  @override
+  Future<SavedRoute> saveRoute(SavedRoute route) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    _savedRoutes.removeWhere((r) => r.id == route.id);
+    _savedRoutes.insert(0, route);
+    return route;
+  }
+
+  @override
+  Future<void> deleteSavedRoute(String savedRouteId) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    _savedRoutes.removeWhere((r) => r.id == savedRouteId);
+  }
+
+  @override
+  Future<List<TripHistorySummary>> getTripHistory() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return List.unmodifiable(_tripHistory);
+  }
+
+  @override
+  Future<TripResponse> getTripDetail(String analysisId) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    final tripRepo = MockTripRepository();
+    return tripRepo.analyzeTrip(TripRequest(
+      origin: 'Noida Sector 62',
+      destination: 'Gurgaon Cyber Hub',
+      departureTime: DateTime(2026, 9, 18, 9, 30),
+      mode: TransportMode.bike,
+    ));
+  }
+
+  @override
+  Future<List<ConversationSummary>> getConversations() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return List.unmodifiable(_conversations);
+  }
+}
+

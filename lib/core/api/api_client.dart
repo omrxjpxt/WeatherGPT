@@ -6,22 +6,57 @@ import 'api_config.dart';
 import 'api_exception.dart';
 
 class ApiClient {
-  final http.Client _client = http.Client();
+  final http.Client _client;
+  final Future<String?> Function()? tokenProvider;
+
+  ApiClient({
+    http.Client? client,
+    this.tokenProvider,
+  }) : _client = client ?? http.Client();
 
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path').replace(queryParameters: queryParams);
-    return _performRequest(() => _client.get(uri, headers: _headers));
+    final headers = await _buildHeaders();
+    return _performRequest(() => _client.get(uri, headers: headers));
   }
 
   Future<dynamic> post(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
-    return _performRequest(() => _client.post(uri, headers: _headers, body: jsonEncode(body)));
+    final headers = await _buildHeaders();
+    return _performRequest(() => _client.post(uri, headers: headers, body: jsonEncode(body)));
   }
 
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+  Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders();
+    return _performRequest(() => _client.put(uri, headers: headers, body: jsonEncode(body)));
+  }
+
+  Future<dynamic> delete(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders();
+    return _performRequest(() => _client.delete(uri, headers: headers));
+  }
+
+  Future<Map<String, String>> _buildHeaders() async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    if (tokenProvider != null) {
+      try {
+        final token = await tokenProvider!();
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+      } catch (_) {
+        // Token retrieval failure does not crash the request; request proceeds as unauthenticated
+      }
+    }
+
+    return headers;
+  }
 
   Future<dynamic> _performRequest(Future<http.Response> Function() requestFunc) async {
     try {
@@ -62,7 +97,13 @@ class ApiClient {
       ApiErrorType errorType = ApiErrorType.serverError;
       String message = 'Server error occurred.';
 
-      if (response.statusCode == 422) {
+      if (response.statusCode == 401) {
+        errorType = ApiErrorType.unauthorized;
+        message = 'Authentication required or session expired.';
+      } else if (response.statusCode == 403) {
+        errorType = ApiErrorType.forbidden;
+        message = 'Access forbidden.';
+      } else if (response.statusCode == 422) {
         errorType = ApiErrorType.validationError;
         message = 'Invalid request parameters.';
       } else if (response.statusCode == 503) {
@@ -78,7 +119,7 @@ class ApiClient {
           if (detail is String) {
             message = detail;
           } else if (detail is List) {
-             message = detail.map((e) => e['msg']).join(', ');
+            message = detail.map((e) => e['msg']).join(', ');
           }
         }
       } catch (_) {}

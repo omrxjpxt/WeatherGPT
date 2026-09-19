@@ -20,6 +20,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   bool _isLoading = false;
+  String? _conversationId;
 
   final _messages = <_ChatMessage>[
     const _ChatMessage(
@@ -349,7 +350,14 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
     try {
       final repo = ref.read(assistantRepositoryProvider);
-      final response = await repo.chat(AssistantChatRequest(message: query));
+      final response = await repo.chat(AssistantChatRequest(
+        message: query,
+        conversationId: _conversationId,
+      ));
+
+      if (response.conversationId != null) {
+        _conversationId = response.conversationId;
+      }
 
       if (mounted) {
         setState(() {

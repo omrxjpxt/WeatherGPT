@@ -143,11 +143,23 @@
 - 🟢 **Test Verification**:
   - Backend: **100/100 passing** (`pytest backend/tests`), including integration tests verifying fire-and-forget persistence and `MEMORY_MODE` safety.
 
+## Phase 18: Flutter Firebase Auth & Client Data Persistence (Complete)
+- 🟢 **Zero Direct Firestore Access**: Flutter communicates exclusively through FastAPI (`/api/v1/users/me/*`). No `cloud_firestore` dependency is included in Flutter.
+- 🟢 **Firebase Auth ID Token Flow**: Flutter uses `firebase_auth` (and offline `MockAuthService`) solely to obtain ID tokens. `ApiClient` attaches tokens via `Authorization: Bearer <token>`.
+- 🟢 **Unrestricted Guest Access**: Guest users retain 100% full access to trip analysis, route alternatives, what-if departure simulation, mode comparison, and Assistant features.
+- 🟢 **Bookmark & Persistence Actions**: "Save Route" on `TripAnalysisScreen` prompts guest users with a non-blocking sign-in modal, while authenticated users save routes directly to their profile. Saving never recalculates risk or alters route selection.
+- 🟢 **Profile & Saved Routes UI**: `ProfileScreen` renders guest vs. authenticated states dynamically, with tap-to-analyze on saved routes, deletion, and sign-out.
+- 🟢 **Immutable Historical Snapshots**: Past trip analyses are clearly labeled as "Historical Snapshot (Audit)" to distinguish them from real-time weather assessments.
+- 🟢 **Assistant Session Persistence**: `conversationId` is passed and preserved across conversation turns.
+- 🟢 **Guarded Firebase Initialization**: `FirebaseInit.initialize()` catches missing platform configs and seamlessly continues in offline mock mode without crashing.
+- 🟢 **Test Verification**:
+  - Flutter Analysis: **0 issues** (`flutter analyze`).
+  - Flutter Unit & Widget Tests: **58/58 passing** (`flutter test`), up from baseline of 34 tests.
+  - Backend Test Suite: **100/100 passing** (`pytest backend/tests`).
+
 ## Currently Pending
 - Production API credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
 - Production Traffic Provider (TomTom / Google Traffic).
 - Direct authoritative IMD CAP integration (pending government IP whitelisting).
-- Flutter Firebase Auth UI integration (Phase 18).
+- Production Firebase project credentials for live deployment.
 
-## Next Steps
-- Implement Flutter Firebase Auth and Client Data Persistence.

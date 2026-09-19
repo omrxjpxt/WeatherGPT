@@ -46,3 +46,17 @@ abstract class AssistantRepository {
   Future<AssistantParseResponse> parseIntent(String query, {DateTime? referenceTime});
 }
 
+abstract class UserRepository {
+  Future<UserProfile> getProfile();
+  Future<UserProfile> updateProfile(UserProfile profile);
+
+  Future<List<SavedRoute>> getSavedRoutes();
+  Future<SavedRoute> saveRoute(SavedRoute route);
+  Future<void> deleteSavedRoute(String savedRouteId);
+
+  Future<List<TripHistorySummary>> getTripHistory();
+  Future<TripResponse> getTripDetail(String analysisId);
+
+  Future<List<ConversationSummary>> getConversations();
+}
+

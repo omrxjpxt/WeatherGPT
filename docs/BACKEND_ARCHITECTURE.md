@@ -116,3 +116,11 @@ To ensure seamless local development and integration testing without requiring s
 - In `MEMORY_MODE`, repositories utilize in-memory dictionaries.
 - Data structures emulate Firestore behavior, including synthetic timestamps for accurate sorting logic.
 - Log warnings are emitted on application start notifying developers that data will be lost on restart.
+
+## Client Authentication & Persistence Boundary (Phase 18)
+The boundary between the Flutter client and the backend persistence layer follows strict principles:
+- **Client Role**: Flutter uses Firebase Auth solely to retrieve Firebase ID tokens, which are attached as `Authorization: Bearer <token>` on HTTP requests via `ApiClient`.
+- **FastAPI Role**: FastAPI decodes and verifies the ID token (`get_current_user`), enforces user scoping, and accesses Firestore (or Memory Mode).
+- **Client Zero Direct Firestore Rule**: Flutter has NO direct dependency on `cloud_firestore` and performs no direct database operations.
+- **Decision Engine Isolation**: The Decision Engine remains 100% agnostic to user identity, authentication state, or stored routes. Saved routes act solely as bookmarks for subsequent public trip analysis requests.
+

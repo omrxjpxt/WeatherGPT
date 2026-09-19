@@ -10,6 +10,7 @@ import '../../core/theme/tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../../core/providers.dart';
 import '../../models/models.dart';
+import '../profile/auth_dialog.dart';
 
 /// Trip Analysis Refined — Route map with risk segments and trip details
 class TripAnalysisScreen extends ConsumerWidget {
@@ -32,16 +33,16 @@ class TripAnalysisScreen extends ConsumerWidget {
   }
 }
 
-class _TripAnalysisBody extends StatefulWidget {
+class _TripAnalysisBody extends ConsumerStatefulWidget {
   final TripResponse trip;
 
   const _TripAnalysisBody({required this.trip});
 
   @override
-  State<_TripAnalysisBody> createState() => _TripAnalysisBodyState();
+  ConsumerState<_TripAnalysisBody> createState() => _TripAnalysisBodyState();
 }
 
-class _TripAnalysisBodyState extends State<_TripAnalysisBody> {
+class _TripAnalysisBodyState extends ConsumerState<_TripAnalysisBody> {
   late String _activeRouteId;
 
   @override
@@ -743,12 +744,20 @@ class _TripAnalysisBodyState extends State<_TripAnalysisBody> {
       children: [
         Expanded(
           child: _ActionButton(
+            icon: CupertinoIcons.bookmark,
+            label: 'Save Route',
+            onTap: () => _handleSaveRoute(context),
+          ),
+        ),
+        const SizedBox(width: Spacing.sm),
+        Expanded(
+          child: _ActionButton(
             icon: CupertinoIcons.slider_horizontal_3,
             label: 'What-If',
             onTap: () => context.push('/what-if'),
           ),
         ),
-        const SizedBox(width: Spacing.gutter),
+        const SizedBox(width: Spacing.sm),
         Expanded(
           child: _ActionButton(
             icon: CupertinoIcons.arrow_right_arrow_left,
@@ -758,6 +767,97 @@ class _TripAnalysisBodyState extends State<_TripAnalysisBody> {
         ),
       ],
     );
+  }
+
+  Future<void> _handleSaveRoute(BuildContext context) async {
+    final authState = ref.read(authStateProvider);
+
+    if (!authState.isAuthenticated) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.card)),
+          backgroundColor: AppColors.cardBackground,
+          title: Text(
+            'Save Route',
+            style: AppTypography.headlineMd.copyWith(color: AppColors.primaryText),
+          ),
+          content: Text(
+            'Sign in to save this route to your profile and sync across devices.',
+            style: AppTypography.bodySm.copyWith(color: AppColors.onSurfaceVariant),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Continue as Guest',
+                style: AppTypography.labelMd.copyWith(color: AppColors.outline),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                AuthDialog.show(
+                  context,
+                  title: 'Sign In to Save Route',
+                  subtitle: 'Bookmark your commutes and access them anytime.',
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.sunriseAmber,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.base)),
+              ),
+              child: Text(
+                'Sign In / Create Account',
+                style: AppTypography.labelMd.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    try {
+      final origin = widget.trip.request.origin;
+      final destination = widget.trip.request.destination;
+      final routeId = 'route_${origin.hashCode.abs()}_${destination.hashCode.abs()}';
+      final savedRoute = SavedRoute(
+        id: routeId,
+        name: '$origin → $destination',
+        originId: origin,
+        destinationId: destination,
+        createdAt: DateTime.now(),
+      );
+
+      await ref.read(userSavedRoutesProvider.notifier).saveRoute(savedRoute);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Route saved to your profile',
+              style: AppTypography.bodySm.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.primaryText,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save route: $e',
+              style: AppTypography.bodySm.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.riskSevere,
+          ),
+        );
+      }
+    }
   }
 
   Color _colorForRisk(RiskLevel level) => switch (level) {

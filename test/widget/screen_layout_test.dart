@@ -17,6 +17,8 @@ import 'package:weather_gpt/features/historical_replay/historical_replay_screen.
 import 'package:weather_gpt/features/assistant/assistant_screen.dart';
 import 'package:weather_gpt/features/voice/voice_input_screen.dart';
 import 'package:weather_gpt/features/profile/profile_screen.dart';
+import 'package:weather_gpt/core/auth/auth_service.dart';
+import 'package:weather_gpt/core/auth/mock_auth_service.dart';
 
 Widget _buildTestApp({
   required Widget screen,
@@ -600,7 +602,19 @@ void main() {
 
     testWidgets('Profile Screen renders user settings and preferences', (tester) async {
       await tester.binding.setSurfaceSize(const Size(393, 852));
-      await tester.pumpWidget(_buildTestApp(screen: const ProfileScreen()));
+      final authService = MockAuthService(
+        initialUser: const AppUser(
+          uid: 'user-om',
+          email: 'om@weathergpt.com',
+          displayName: 'Om Gangwar',
+        ),
+      );
+      await tester.pumpWidget(_buildTestApp(
+        screen: const ProfileScreen(),
+        overrides: [
+          authServiceProvider.overrideWithValue(authService),
+        ],
+      ));
       await tester.pumpAndSettle();
 
       expect(find.text('Profile'), findsOneWidget);

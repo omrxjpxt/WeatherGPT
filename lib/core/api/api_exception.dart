@@ -6,6 +6,8 @@ enum ApiErrorType {
   routingUnavailable,
   weatherUnavailable,
   dataUnavailable,
+  unauthorized,
+  forbidden,
   unknown,
 }
 

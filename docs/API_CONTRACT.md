@@ -13,6 +13,15 @@ The Flutter application dynamically configures the base URL using `ApiConfig` (`
 
 All endpoints accept and return camelCase JSON automatically handled by the backend's `alias_generator=to_camel` and Flutter's `.fromJson` models.
 
+## Authentication & Authorization
+
+- **Header Format**: `Authorization: Bearer <firebase_id_token>`
+- **Guest Access**: Public endpoints (`POST /trips/analyze`, `POST /assistant/chat`, `GET /weather/*`, `GET /alerts/*`) do NOT require authentication. Guest requests omit the `Authorization` header.
+- **Protected Endpoints**: `/users/me/*` endpoints strictly require a valid Bearer token.
+  - `401 Unauthorized`: Missing or expired/invalid ID token.
+  - `403 Forbidden`: Authenticated user lacks permission for requested resource.
+- **Client Implementation**: `ApiClient` in Flutter uses a dynamic `tokenProvider: Future<String?> Function()` callback to attach the current token if authenticated. All HTTP verbs (`GET`, `POST`, `PUT`, `DELETE`) are supported.
+
 ## Endpoints
 
 ### 1. Health
@@ -166,9 +175,11 @@ Full end-to-end conversation pipeline: extracts intent, deterministically valida
 - `query`: str (User natural language query in English, Hindi, or Hinglish)
 - `conversationHistory`: List[dict] (Optional conversational context)
 - `referenceTime`: Optional[datetime] (Defaults to UTC now)
+- `conversationId`: Optional[str] (Session-scoped ID for conversation persistence)
 
 **Response:** `AssistantChatResponse`
 - `message`: str (Accepted grounded natural language explanation or deterministic fallback)
+- `conversationId`: Optional[str] (Persisted session/conversation identifier)
 - `intent`: `ExtractedIntent`
   - `userIntent`: `trip_decision` | `weather_question` | `route_comparison` | `what_if` | `alert_question` | `general_weather`
   - `origin`: Optional[str]

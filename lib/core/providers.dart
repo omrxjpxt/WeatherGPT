@@ -7,12 +7,98 @@ import '../repositories/http/http_weather_repository.dart';
 import '../repositories/http/http_risk_repository.dart';
 import '../repositories/http/http_alert_repository.dart';
 import '../repositories/http/http_assistant_repository.dart';
+import '../repositories/http/http_user_repository.dart';
+import 'auth/auth_service.dart';
+import 'auth/firebase_auth_service.dart';
+import 'auth/mock_auth_service.dart';
+import 'auth/firebase_init.dart';
 import 'api/api_config.dart';
 import 'api/api_client.dart';
 
+// ── Auth Service & State ──
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  if (ApiConfig.mode == AppMode.live && FirebaseInit.isInitialized) {
+    return FirebaseAuthService();
+  }
+  return MockAuthService();
+});
+
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    final authService = ref.watch(authServiceProvider);
+    final subscription = authService.authStateChanges.listen((user) {
+      state = state.copyWith(user: user, clearUser: user == null, isLoading: false, error: null);
+    });
+    ref.onDispose(subscription.cancel);
+
+    return AuthState(user: authService.currentUser);
+  }
+
+  Future<void> signInWithEmail(String email, String password) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await ref.read(authServiceProvider).signInWithEmailAndPassword(email, password);
+      state = state.copyWith(user: user, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> createUserWithEmail(String email, String password) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await ref.read(authServiceProvider).createUserWithEmailAndPassword(email, password);
+      state = state.copyWith(user: user, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> signInWithMockUser({
+    String uid = 'test-user-id',
+    String email = 'test@example.com',
+    String displayName = 'Demo Traveler',
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await ref.read(authServiceProvider).signInWithMockCredentials(
+        uid: uid,
+        email: email,
+        displayName: displayName,
+      );
+      state = state.copyWith(user: user, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> signOut() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await ref.read(authServiceProvider).signOut();
+      state = const AuthState(user: null, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+}
+
+final authStateProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+
 // ── API Client Provider ──
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient();
+  return ApiClient(
+    tokenProvider: () async {
+      final auth = ref.read(authServiceProvider);
+      return auth.getIdToken();
+    },
+  );
 });
 
 // ── Repository Providers ──
@@ -56,6 +142,62 @@ final assistantRepositoryProvider = Provider<AssistantRepository>((ref) {
   }
   return MockAssistantRepository();
 });
+
+final userRepositoryProvider = Provider<UserRepository>((ref) {
+  if (ApiConfig.mode == AppMode.live) {
+    return HttpUserRepository(ref.read(apiClientProvider));
+  }
+  return MockUserRepository();
+});
+
+// ── User Persistence Providers ──
+
+final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  if (!authState.isAuthenticated) return null;
+  final repo = ref.read(userRepositoryProvider);
+  return repo.getProfile();
+});
+
+class SavedRoutesNotifier extends AsyncNotifier<List<SavedRoute>> {
+  @override
+  Future<List<SavedRoute>> build() async {
+    final authState = ref.watch(authStateProvider);
+    if (!authState.isAuthenticated) return const [];
+    final repo = ref.read(userRepositoryProvider);
+    return repo.getSavedRoutes();
+  }
+
+  Future<void> saveRoute(SavedRoute route) async {
+    final repo = ref.read(userRepositoryProvider);
+    await repo.saveRoute(route);
+    state = await AsyncValue.guard(() => repo.getSavedRoutes());
+  }
+
+  Future<void> deleteRoute(String savedRouteId) async {
+    final repo = ref.read(userRepositoryProvider);
+    await repo.deleteSavedRoute(savedRouteId);
+    state = await AsyncValue.guard(() => repo.getSavedRoutes());
+  }
+}
+
+final userSavedRoutesProvider =
+    AsyncNotifierProvider<SavedRoutesNotifier, List<SavedRoute>>(SavedRoutesNotifier.new);
+
+final userTripHistoryProvider = FutureProvider<List<TripHistorySummary>>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  if (!authState.isAuthenticated) return const [];
+  final repo = ref.read(userRepositoryProvider);
+  return repo.getTripHistory();
+});
+
+final userConversationsProvider = FutureProvider<List<ConversationSummary>>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  if (!authState.isAuthenticated) return const [];
+  final repo = ref.read(userRepositoryProvider);
+  return repo.getConversations();
+});
+
 
 // ── Trip State ──
 
