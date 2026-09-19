@@ -34,6 +34,7 @@ class TripService:
         trip_repository: Optional['app.repositories.interfaces.trip_repository.TripRepository'] = None,
         geocoding_provider: Optional[GeocodingProvider] = None,
         air_quality_provider: Optional[AirQualityProvider] = None,
+        metro_provider: Optional[RoutingProvider] = None,
     ):
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
@@ -50,7 +51,7 @@ class TripService:
         
         self.engine = DecisionEngine()
         self.route_evaluator = RouteEvaluator(self.engine)
-        self._metro_provider = MockRoutingProvider()
+        self._metro_provider = metro_provider or MockRoutingProvider()
 
     def _evaluate_alert_policy(self, alerts: List['NormalizedAlert']) -> List['NormalizedAlert']:
         """
@@ -110,7 +111,7 @@ class TripService:
         
         active_routing_provider = self._metro_provider if request.mode == TransportMode.metro else self.routing_provider
         routing_provider_name = active_routing_provider.provider_name
-        if request.mode == TransportMode.metro:
+        if request.mode == TransportMode.metro and isinstance(active_routing_provider, MockRoutingProvider):
             routing_provider_name = f"{routing_provider_name} (Demo Transit)"
 
         # 2. Concurrently fetch independent upstream provider data

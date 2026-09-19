@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     air_quality_enabled: bool = True
     google_traffic_aware: bool = True
     nominatim_user_agent: str = "WeatherGPT-Navigation/1.0 (https://github.com/weathergpt)"
+    alert_provider: str = "sachet" # "sachet", "weatherapi", "mock"
+    sachet_feed_url: str = "https://sachet.ndma.gov.in/cap_public_website/rss/rss_delhi.xml"
+    sachet_timeout_seconds: float = 3.0
+    sachet_cache_ttl_seconds: int = 300
+    transit_provider: str = "dmrc" # "dmrc", "mock"
+    hazard_provider: str = "delhi_pwd" # "delhi_pwd", "mock"
+    pincode_geocoding_enabled: bool = True
     weather_api_key: Optional[str] = None
     traffic_api_key: Optional[str] = None
     llm_api_key: Optional[str] = None    # Provider Credentials

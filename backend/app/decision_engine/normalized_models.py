@@ -59,6 +59,13 @@ class NormalizedHazard(BaseModel):
     trigger_precipitation_mm: Optional[float] = None
     trigger_condition: Optional[str] = None
 
+    # Phase 21 Waterlogging & Underpass Intelligence
+    is_underpass: bool = False
+    water_depth_threshold_cm: float = 15.0
+    impassable_modes: List[str] = Field(default_factory=lambda: ["walk", "bike"])
+    chronic: bool = True
+    location_name: Optional[str] = None
+
 class HazardRelevanceResult(BaseModel):
     hazard_id: str
     spatially_relevant: bool = False
@@ -77,12 +84,19 @@ class NormalizedAlert(BaseModel):
     source_name: str
     source_class: AlertSourceClass
     severity: AlertSeverity
-    affected_areas_polygon: List[List[float]] # Mock simple representation of area
+    affected_areas_polygon: List[List[float]] = Field(default_factory=list)
     issued_at: datetime
-    expires_at: Optional[datetime]
+    expires_at: Optional[datetime] = None
     action: Optional[str] = None
     source_url: Optional[str] = None
     is_override_eligible: bool = False
+
+    # Phase 21 Official Alert Metadata
+    headline: Optional[str] = None
+    event: Optional[str] = None
+    urgency: Optional[str] = None
+    certainty: Optional[str] = None
+    affected_districts: List[str] = Field(default_factory=list)
 
 class TripContext(BaseModel):
     origin: str

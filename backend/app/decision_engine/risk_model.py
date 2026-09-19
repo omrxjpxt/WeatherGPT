@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional, Any
 from datetime import datetime
 
-from app.models.enums import RiskLevel, TransportMode
+from app.models.enums import RiskLevel, TransportMode, HazardType
 from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard, HazardRelevanceResult
 from app.decision_engine.exposure import get_mode_exposure_multiplier
 from app.models.risk import RiskFactor
@@ -189,18 +189,23 @@ def calculate_segment_risk(
                 weather_triggered = True
                 
             if weather_triggered:
-                currently_relevant = True
-                from app.core.config import settings
-                hazard_contribution = int(h.base_severity * settings.hazard_influence_factor)
-                segment_hazards_score = max(segment_hazards_score, hazard_contribution)
-                relevance_reason = f"Route near active {h.type.value} hotspot ({h.source_name}). Triggered by {weather.condition}."
-                factors.append(RiskFactor(
-                    name="Historical Hazard Risk",
-                    description=relevance_reason,
-                    score=hazard_contribution,
-                    level=_score_to_level(hazard_contribution),
-                    weight=0.3
-                ))
+                if mode == TransportMode.metro and h.type == HazardType.waterlogging:
+                    currently_relevant = False
+                    hazard_contribution = 0
+                    relevance_reason = "Metro transit network is unaffected by street-surface waterlogging."
+                else:
+                    currently_relevant = True
+                    from app.core.config import settings
+                    hazard_contribution = int(h.base_severity * settings.hazard_influence_factor)
+                    segment_hazards_score = max(segment_hazards_score, hazard_contribution)
+                    relevance_reason = f"Route near active {h.type.value} hotspot ({h.source_name}). Triggered by {weather.condition}."
+                    factors.append(RiskFactor(
+                        name="Historical Hazard Risk",
+                        description=relevance_reason,
+                        score=hazard_contribution,
+                        level=_score_to_level(hazard_contribution),
+                        weight=0.3
+                    ))
             else:
                 relevance_reason = "Near route, but weather triggers not met."
         

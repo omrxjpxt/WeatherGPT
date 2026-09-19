@@ -218,8 +218,40 @@
   - Flutter Tests: **63/63 passing** (`flutter test`).
   - Backend Test Suite: **165/165 passing** (`pytest backend/tests`), up from 146.
 
+## Phase 21: Provider & Capability Expansion (Complete)
+- 🟢 **NDMA SACHET Official Emergency Alerts**:
+  - Direct integration with National Disaster Management Authority (NDMA) CAP 1.2 XML feed (`sachet.ndma.gov.in`).
+  - Persistent `httpx.AsyncClient` session preserving government security gateway cookies across requests.
+  - ETag and HTTP 304 caching with in-memory TTL policy (default 300s).
+  - Secure XML parsing using `defusedxml.ElementTree` protecting against XXE, entity expansion, and billion laughs attacks.
+  - Full CAP 1.2 extraction: identifier, sender, effective/expires, severity, certainty, urgency, headline, description, instruction, area description, and 2D polygons.
+  - Ray-casting point-in-polygon spatial filtering for commuter routes.
+  - Direct mapping to normalized models with `source_class = AlertSourceClass.authoritative` and truthful typed degradation on failure.
+- 🟢 **Delhi PWD Waterlogging Hazard Intelligence**:
+  - In-memory spatial index with 30 verified priority inundation hotspots and chronic underpasses (Minto Bridge, Zakhira, Pul Prahlad Pur, Moolchand, Dwarka, etc.) sourced from official Delhi PWD Annual Monsoon Plans and Delhi Traffic Police Inundation Bulletins.
+  - Explicit separation between verified public facts and hydrologic modeling assumptions (15 mm/hr underpass activation, 35 mm/hr surface road activation, 15 cm two-wheeler diversion depth, 30 cm car stalling depth).
+  - Spatial bounding-box corridor filtering along candidate routes.
+  - Deterministic mode-specific behavior: Walking (1.1x) and two-wheelers (1.0x) are most exposed; cars (0.4x) have higher water-depth tolerance; metro tracks are completely unaffected by street-surface waterlogging (`currently_relevant = False`, contribution 0).
+- 🟢 **DMRC / Delhi Metro Transit Provider**:
+  - Authentic station-to-station graph router across 7 metro lines (Blue, Yellow, Magenta, Red, Violet, Airport Express, Rapid Metro) curated from Open Transit Data Delhi (`otd.delhi.gov.in`) and Delhi Transport Stack (`delhi.transportstack.in`).
+  - In-memory Dijkstra shortest path with 4-minute line interchange penalties.
+  - Realistic walking access and egress legs.
+  - Zero external network requests during trip evaluation.
+  - Typed empty route `[]` returned if origin/destination is out of range (>12 km from nearest station).
+- 🟢 **NCR Postal PIN-Code Geocoding Fast Path**:
+  - Instant offline centroid geocoding for 6-digit Indian PIN codes across Delhi (110xxx), Noida (2013xx), Gurgaon (122xxx), Ghaziabad (2010xx), and Faridabad (121xxx).
+  - Explicit semantics: `is_exact = False`, `confidence = 0.90`, `result_type = POSTAL_CODE`, `provenance = OFFLINE_CURATED`.
+  - Architectural guard: Yields to exact street/rooftop geocoders when street names or house numbers are present.
+  - Out-of-NCR fallback support via India Post directory.
+  - Priority chain placement: Coordinates -> PIN-code fast-path -> Google -> Nominatim -> Open-Meteo -> Curated Gazetteer.
+- 🟢 **Test Verification**:
+  - Flutter Analysis: **0 issues** (`flutter analyze`).
+  - Flutter Tests: **63/63 passing** (`flutter test`).
+  - Backend Test Suite: **199/199 passing** (`pytest backend/tests`), up from 165.
+  - 10x Concurrency Determinism: **100% bit-identical**.
+
 ## Currently Pending
 - Production API credentials for Google Routes / Geocoding API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
-- Direct authoritative IMD CAP integration (pending government IP whitelisting).
+
 
 

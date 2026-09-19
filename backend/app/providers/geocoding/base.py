@@ -12,6 +12,7 @@ class GeocodingResultType(str, Enum):
     SECTOR_NEIGHBORHOOD = "sector_neighborhood"
     CITY_LOCALITY = "city_locality"
     ADMINISTRATIVE = "administrative"
+    POSTAL_CODE = "postal_code"
     COORDINATE = "coordinate"
     UNKNOWN = "unknown"
 
@@ -35,6 +36,26 @@ class GeocodingResult(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     provenance: GeocodingProvenance = GeocodingProvenance.LIVE_PROVIDER
     raw_metadata: dict[str, Any] = Field(default_factory=dict)
+
+    from pydantic import model_validator
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_lat_lng(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "lat" not in data and "latitude" in data:
+                data["lat"] = data["latitude"]
+            if "lng" not in data and "longitude" in data:
+                data["lng"] = data["longitude"]
+        return data
+
+    @property
+    def latitude(self) -> float:
+        return self.lat
+
+    @property
+    def longitude(self) -> float:
+        return self.lng
 
 
 class GeocodingResolutionError(Exception):

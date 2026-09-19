@@ -14,6 +14,7 @@ from app.providers.geocoding import (
     NominatimGeocodingProvider,
     OpenMeteoGeocodingProvider,
     GoogleGeocodingProvider,
+    NcrPincodeGeocodingProvider,
     FallbackGeocodingProvider,
     MockGeocodingProvider,
 )
@@ -26,6 +27,7 @@ from app.providers.air_quality import (
 from app.providers.weather.base import WeatherProvider
 from app.providers.alerts.base import AlertProvider
 from app.providers.traffic.base import TrafficProvider
+from app.providers.routing.base import RoutingProvider
 from app.services.trip_service import TripService
 from app.services.scenario_service import ScenarioService
 from app.services.assistant_service import AssistantService
@@ -49,6 +51,13 @@ if settings.routing_provider == "google":
 else:
     routing_provider = _mock_routing
 
+# Transit / Metro Provider setup
+if settings.transit_provider == "dmrc":
+    from app.providers.transit.dmrc_gtfs import DmrcMetroProvider
+    metro_provider: RoutingProvider = DmrcMetroProvider()
+else:
+    metro_provider = MockRoutingProvider()
+
 # Geocoding Provider setup
 if settings.geocoding_provider == "mock":
     geocoding_provider: GeocodingProvider = MockGeocodingProvider()
@@ -56,6 +65,8 @@ elif settings.geocoding_provider == "gazetteer":
     geocoding_provider = CuratedGazetteerGeocodingProvider()
 else:
     chain: list[GeocodingProvider] = []
+    if settings.pincode_geocoding_enabled:
+        chain.append(NcrPincodeGeocodingProvider())
     if settings.google_maps_api_key:
         chain.append(GoogleGeocodingProvider())
     chain.append(NominatimGeocodingProvider())
@@ -72,7 +83,20 @@ else:
     air_quality_provider = OpenMeteoAirQualityProvider()
 
 traffic_provider = MockTrafficProvider()
-alert_provider = MockAlertProvider()
+
+# Alert Provider setup
+if settings.alert_provider == "sachet":
+    from app.providers.alerts.sachet_cap import NdmaSachetAlertProvider
+    alert_provider: AlertProvider = NdmaSachetAlertProvider(
+        feed_url=settings.sachet_feed_url,
+        timeout_seconds=settings.sachet_timeout_seconds,
+        cache_ttl_seconds=settings.sachet_cache_ttl_seconds,
+    )
+elif settings.alert_provider == "weatherapi":
+    from app.providers.alerts.weatherapi import WeatherApiAlertProvider
+    alert_provider = WeatherApiAlertProvider()
+else:
+    alert_provider = MockAlertProvider()
 
 if settings.llm_api_key or os.environ.get("GEMINI_API_KEY"):
     from app.providers.llm.gemini import GeminiLLMProvider
@@ -80,7 +104,9 @@ if settings.llm_api_key or os.environ.get("GEMINI_API_KEY"):
 else:
     llm_provider = MockLLMProvider()
 
+from app.repositories.hazard_repository import HazardRepository
 from app.repositories.mock_hazard_repository import MockHazardRepository
+from app.providers.hazard.delhi_waterlogging import DelhiWaterloggingHazardRepository
 from app.repositories.firestore.client import get_firestore_client
 from app.repositories.firestore.trip_repository import FirestoreTripRepository
 from app.repositories.firestore.user_repository import FirestoreUserRepository
@@ -91,8 +117,11 @@ trip_repository = FirestoreTripRepository(firestore_client)
 user_repository = FirestoreUserRepository(firestore_client)
 conversation_repository = FirestoreConversationRepository(firestore_client)
 
-# Repositories
-hazard_repository = MockHazardRepository()
+# Hazard Repository setup
+if settings.hazard_provider == "delhi_pwd":
+    hazard_repository: HazardRepository = DelhiWaterloggingHazardRepository()
+else:
+    hazard_repository = MockHazardRepository()
 
 trip_service = TripService(
     weather_provider=weather_provider, 
@@ -103,6 +132,7 @@ trip_service = TripService(
     trip_repository=trip_repository,
     geocoding_provider=geocoding_provider,
     air_quality_provider=air_quality_provider,
+    metro_provider=metro_provider,
 )
 scenario_service = ScenarioService(trip_service)
 assistant_service = AssistantService(
@@ -138,8 +168,11 @@ def get_user_repository() -> FirestoreUserRepository:
 def get_conversation_repository() -> FirestoreConversationRepository:
     return conversation_repository
 
-def get_hazard_repository() -> MockHazardRepository:
+def get_hazard_repository() -> HazardRepository:
     return hazard_repository
+
+def get_metro_provider() -> RoutingProvider:
+    return metro_provider
 
 def get_geocoding_provider() -> GeocodingProvider:
     return geocoding_provider
