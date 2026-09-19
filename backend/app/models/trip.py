@@ -9,6 +9,7 @@ from app.models.risk import RiskAssessment
 from app.models.route import RouteSegment, EvaluatedRoute
 from app.models.hazard import Hazard
 from app.models.traffic import TrafficSnapshot
+from app.providers.air_quality.base import AirQualitySnapshot
 
 class Recommendation(WeatherBaseModel):
     headline: str
@@ -51,3 +52,5 @@ class TripResponse(WeatherBaseModel):
     distance_km: float
     traffic: Optional[TrafficSnapshot] = None
     routes: List[EvaluatedRoute] = Field(default_factory=list)
+    air_quality: Optional[AirQualitySnapshot] = None
+    geocoding_provenance: Optional[dict[str, str]] = None

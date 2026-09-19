@@ -8,6 +8,21 @@ from app.providers.traffic.mock import MockTrafficProvider
 from app.providers.alerts.mock import MockAlertProvider
 from app.providers.llm.mock import MockLLMProvider
 
+from app.providers.geocoding import (
+    GeocodingProvider,
+    CuratedGazetteerGeocodingProvider,
+    NominatimGeocodingProvider,
+    OpenMeteoGeocodingProvider,
+    GoogleGeocodingProvider,
+    FallbackGeocodingProvider,
+    MockGeocodingProvider,
+)
+from app.providers.air_quality import (
+    AirQualityProvider,
+    OpenMeteoAirQualityProvider,
+    MockAirQualityProvider,
+)
+
 from app.providers.weather.base import WeatherProvider
 from app.providers.alerts.base import AlertProvider
 from app.providers.traffic.base import TrafficProvider
@@ -33,6 +48,28 @@ if settings.routing_provider == "google":
     routing_provider = FallbackRoutingProvider(primary=_google_routing)
 else:
     routing_provider = _mock_routing
+
+# Geocoding Provider setup
+if settings.geocoding_provider == "mock":
+    geocoding_provider: GeocodingProvider = MockGeocodingProvider()
+elif settings.geocoding_provider == "gazetteer":
+    geocoding_provider = CuratedGazetteerGeocodingProvider()
+else:
+    chain: list[GeocodingProvider] = []
+    if settings.google_maps_api_key:
+        chain.append(GoogleGeocodingProvider())
+    chain.append(NominatimGeocodingProvider())
+    chain.append(OpenMeteoGeocodingProvider())
+    chain.append(CuratedGazetteerGeocodingProvider())
+    geocoding_provider = FallbackGeocodingProvider(providers=chain, min_confidence=0.50)
+
+# Air Quality Provider setup
+if not settings.air_quality_enabled or settings.air_quality_provider == "disabled":
+    air_quality_provider: AirQualityProvider | None = None
+elif settings.air_quality_provider == "mock":
+    air_quality_provider = MockAirQualityProvider()
+else:
+    air_quality_provider = OpenMeteoAirQualityProvider()
 
 traffic_provider = MockTrafficProvider()
 alert_provider = MockAlertProvider()
@@ -63,7 +100,9 @@ trip_service = TripService(
     alert_provider=alert_provider,
     traffic_provider=traffic_provider,
     hazard_repository=hazard_repository,
-    trip_repository=trip_repository
+    trip_repository=trip_repository,
+    geocoding_provider=geocoding_provider,
+    air_quality_provider=air_quality_provider,
 )
 scenario_service = ScenarioService(trip_service)
 assistant_service = AssistantService(
@@ -101,3 +140,10 @@ def get_conversation_repository() -> FirestoreConversationRepository:
 
 def get_hazard_repository() -> MockHazardRepository:
     return hazard_repository
+
+def get_geocoding_provider() -> GeocodingProvider:
+    return geocoding_provider
+
+def get_air_quality_provider() -> AirQualityProvider | None:
+    return air_quality_provider
+

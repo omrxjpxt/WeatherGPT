@@ -226,11 +226,82 @@ class GeocodingProvider(ABC):
 ```
 
 Implementations:
-- `GoogleGeocodingProvider`: Live geocoding via Google Maps API when key present.
-- `NominatimGeocodingProvider`: OpenStreetMap geocoding with custom User-Agent and caching.
-- `OpenMeteoGeocodingProvider`: GeoNames-based resolution.
-- `CuratedGazetteerGeocodingProvider`: Offline, deterministic in-memory dictionary for Delhi-NCR.
-- `FallbackGeocodingProvider`: Chained resolution (Google $\to$ Nominatim $\to$ Open-Meteo $\to$ Gazetteer).
+- `GoogleGeocodingProvider`: Live geocoding via Google Maps API wh### 1. Confidence-Aware Geocoding Abstraction
+`backend/app/providers/geocoding/base.py`:
+```python
+from abc import ABC, abstractmethod
+from datetime import datetime
+from enum import Enum
+from typing import Any, Optional
+from pydantic import BaseModel, Field
+
+class GeocodingResultType(str, Enum):
+    EXACT_LANDMARK = "exact_landmark"
+    STREET = "street"
+    SECTOR_NEIGHBORHOOD = "sector_neighborhood"
+    CITY_LOCALITY = "city_locality"
+    ADMINISTRATIVE = "administrative"
+    COORDINATE = "coordinate"
+    UNKNOWN = "unknown"
+
+class GeocodingProvenance(str, Enum):
+    LIVE_PROVIDER = "live_provider"
+    OFFLINE_CURATED = "offline_curated"
+    USER_COORDINATE = "user_coordinate"
+    MOCK_TEST = "mock_test"
+
+class GeocodingResult(BaseModel):
+    query: str
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lng: float = Field(..., ge=-180.0, le=180.0)
+    display_name: str
+    provider: str # "google" | "nominatim" | "open-meteo" | "curated-gazetteer" | "coordinate"
+    result_type: GeocodingResultType
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    is_exact: bool
+    timestamp: datetime
+    provenance: GeocodingProvenance
+    raw_metadata: dict[str, Any] = Field(default_factory=dict)
+
+class GeocodingResolutionError(Exception):
+    def __init__(self, message: str, query: str, status: str = "unresolved_location"):
+        super().__init__(message)
+        self.message = message
+        self.query = query
+        self.status = status
+
+class GeocodingProvider(ABC):
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        pass
+
+    @abstractmethod
+    async def geocode(self, query: str) -> Optional[GeocodingResult]:
+        """Resolves location query into a confidence-aware GeocodingResult or None."""
+        pass
+```
+
+#### Geocoding Confidence Scoring & Ambiguity Policy
+1. **Direct Coordinate Parsing**: `lat, lng` format parsed with confidence $1.0$, `result_type=COORDINATE`, `provenance=USER_COORDINATE`.
+2. **Google Geocoding**:
+   - `location_type == "ROOFTOP"`: confidence $0.98$, `is_exact=True`, `result_type=EXACT_LANDMARK`
+   - `location_type == "RANGE_INTERPOLATED"`: confidence $0.90$, `is_exact=True`, `result_type=STREET`
+   - `location_type == "GEOMETRIC_CENTER"`: confidence $0.80$, `is_exact=False`, `result_type=SECTOR_NEIGHBORHOOD`
+   - `location_type == "APPROXIMATE"`: confidence $0.55$, `is_exact=False`, `result_type=CITY_LOCALITY`
+3. **Curated NCR Gazetteer**:
+   - Pre-indexed Delhi-NCR hubs, metro stations, and sectors: confidence $0.95$, `is_exact=True`, `provenance=OFFLINE_CURATED`, `result_type=SECTOR_NEIGHBORHOOD` or `EXACT_LANDMARK`.
+4. **Nominatim (OSM)**:
+   - Building / Amenity / Landmark: confidence $0.88$, `is_exact=True`
+   - Highway / Road / Street: confidence $0.82$, `is_exact=True`
+   - Suburb / Neighbourhood: confidence $0.78$, `is_exact=False`
+   - City / Administrative: confidence $0.55$, `is_exact=False`
+5. **Open-Meteo Geocoding**:
+   - Matches GeoNames cities/localities: confidence $0.70$ (exact name match) down to $0.50$ (broad region).
+6. **Ambiguity & Low-Confidence Rejection**:
+   - If `confidence < 0.50` or candidates are conflicting/ambiguous, provider returns `None` or raises `GeocodingResolutionError`.
+   - TripService rejects low-confidence/ambiguous locations with HTTP 400 (`status="ambiguous_location"`) rather than silently snapping to wrong coordinates.
+   - Legacy `_mock_geocode` is completely removed from production code.
 
 ### 2. New Abstraction: `AirQualityProvider`
 `backend/app/providers/air_quality/base.py`:
@@ -238,15 +309,28 @@ Implementations:
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AirQualityPoint(BaseModel):
     time: datetime
     pm2_5: float # µg/m³
     pm10: float # µg/m³
     aqi: int # 0-500 US EPA scale
-    category: str # "Good" | "Moderate" | "Unhealthy" | "Severe" | "Hazardous"
+    category: str # "Good" | "Moderate" | "Unhealthy for Sensitive Groups" | "Unhealthy" | "Very Unhealthy" | "Severe" | "Hazardous"
     source_name: str
+    is_stale: bool = False
+    observation_time: Optional[datetime] = None
+
+class AirQualitySnapshot(BaseModel):
+    aqi: int
+    pm2_5: float
+    pm10: float
+    category: str
+    source_name: str
+    is_available: bool = True
+    is_stale: bool = False
+    observation_time: Optional[datetime] = None
+    provenance: str = "live_provider"
 
 class AirQualityProvider(ABC):
     @property
@@ -255,14 +339,9 @@ class AirQualityProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_air_quality(self, lat: float, lng: float, start_time: datetime, hours: int) -> list[AirQualityPoint]:
+    async def get_air_quality(self, lat: float, lng: float, start_time: datetime, hours: int = 4) -> Optional[list[AirQualityPoint]]:
         pass
 ```
-
-Implementation:
-- `OpenMeteoAirQualityProvider`: Queries `https://air-quality-api.open-meteo.com/v1/air-quality` for `pm2_5,pm10,us_aqi`.
-- `MockAirQualityProvider`: Deterministic baseline for testing and offline development.
-- `FallbackAirQualityProvider`: Graceful failure isolation.
 
 ---
 
@@ -282,7 +361,7 @@ class NormalizedWeatherPoint(BaseModel):
     condition: str
     is_extreme_heat: bool
     is_poor_visibility: bool
-    # New Phase 20 Intelligence Fields:
+    # Phase 20 Intelligence Fields:
     precipitation_probability: Optional[float] = None # 0.0 to 100.0 %
     precipitation_intensity_category: Optional[str] = None # "none" | "light" | "moderate" | "heavy" | "violent"
 ```
@@ -301,8 +380,9 @@ class TripContext(BaseModel):
     arrival_deadline: Optional[datetime] = None
     agreement_status: str = "high"
     traffic: Optional[TrafficSnapshot] = None
-    # New Phase 20 Environmental Intelligence:
+    # Phase 20 Environmental Intelligence:
     air_quality_timeline: Optional[List[AirQualityPoint]] = None
+    geocoding_provenance: Optional[dict[str, str]] = None
 ```
 
 ### 3. Update `TripResponse`
@@ -310,25 +390,70 @@ Add optional `air_quality: Optional[AirQualitySnapshot] = None` to `TripResponse
 
 ---
 
-## 7. Decision Engine Integration Strategy
+## 7. Deterministic Air Quality & Precipitation Decision Model
 
-### 1. Precipitation Risk with Probability Weighting
+### 1. Mathematical Air Quality Decision Model
+External air quality providers supply raw environmental telemetry ($AQI$, $PM_{2.5}$, timestamps). The **Decision Engine** deterministically maps these observations into bounded risk factors.
+
+#### A. Input Validation & Freshness Rules
+1. **Missing Data Policy**: If an external AQI provider is down, times out, or returns no data, **missing AQI is NEVER fabricated**. The trip is evaluated cleanly without an Air Quality risk factor, and `tripResponse.airQuality` is either `None` or has `is_available=False`.
+2. **Stale Data Policy**: If observation time $(T_{eval} - T_{obs}) > 6\text{ hours}$, `is_stale=True` is recorded in provenance. If $(T_{eval} - T_{obs}) > 24\text{ hours}$, the reading is discarded as untrustworthy.
+3. **Alert Precedence**: Official weather alerts (IMD, NDMA flood/cyclone/storm red alerts) and physical road hazards (waterlogging, structural closure) **STRICTLY TAKE PRECEDENCE**. An AQI factor can never downgrade or override official alert warnings.
+
+#### B. PM2.5 & AQI Harmonization Precedence
+If both US EPA $AQI$ and $PM_{2.5}$ ($\mu g/m^3$) are present:
+We compute EPA break-point equivalent $AQI_{PM2.5}$:
+- $0.0 \le PM_{2.5} \le 12.0 \implies AQI \in [0, 50]$
+- $12.1 \le PM_{2.5} \le 35.4 \implies AQI \in [51, 100]$
+- $35.5 \le PM_{2.5} \le 55.4 \implies AQI \in [101, 150]$
+- $55.5 \le PM_{2.5} \le 150.4 \implies AQI \in [151, 200]$
+- $150.5 \le PM_{2.5} \le 250.4 \implies AQI \in [201, 300]$
+- $250.5 \le PM_{2.5} \le 350.4 \implies AQI \in [301, 400]$
+- $350.5 \le PM_{2.5} \le 500.4 \implies AQI \in [401, 500]$
+
+Using standard EPA piecewise formula:
+$$I = \frac{I_{hi} - I_{lo}}{BP_{hi} - BP_{lo}} (C - BP_{lo}) + I_{lo}$$
+$$AQI_{effective} = \max(AQI, AQI_{PM2.5})$$
+If only $PM_{2.5}$ is provided, calculate $AQI_{effective} = AQI_{PM2.5}$. If only $AQI$ is provided, $AQI_{effective} = AQI$.
+
+#### C. Raw AQI Base Risk Score ($S_{raw} \in [0, 100]$)
+Deterministic threshold mapping:
+| AQI Range | Category | $S_{raw}$ (Base Risk) | Risk Level | Safety Advice |
+| :--- | :--- | :--- | :--- | :--- |
+| **0 – 50** | Good | **0** | None | Ideal outdoor conditions |
+| **51 – 100** | Moderate | **0** | None | Normal travel conditions |
+| **101 – 150** | Unhealthy for Sensitive | **25** | Low | Sensitive groups exercise caution |
+| **151 – 200** | Unhealthy | **45** | Moderate | N95 mask recommended for open-air travel |
+| **201 – 300** | Very Unhealthy | **70** | Moderate | Heavy smog; limit outdoor exposure |
+| **301 – 400** | Severe / Hazardous | **85** | High | Severe pollution hazard; N95 mandatory |
+| **401 – 500+**| Emergency Smog | **100** | High | Catastrophic air quality; avoid open-air travel |
+
+#### D. Transport Mode Exposure Multiplier ($M_{mode}$)
+Different transport modes experience vastly different inhalation exposure:
+- `walk` (Pedestrian): $M_{mode} = 1.0$ (direct continuous inhalation)
+- `bicycle` (Cyclist): $M_{mode} = 1.0$ (direct physical exertion in traffic air)
+- `two_wheeler` / `bike` (Motorcycle/Scooter): $M_{mode} = 1.0$ (direct exhaust and particulate exposure)
+- `car` / `drive` (Enclosed Private Vehicle): $M_{mode} = 0.15$ (cabin air filtration + AC recirculation)
+- `metro` / `transit` (Public Rail/Metro): $M_{mode} = 0.10$ (enclosed underground/overhead filtered cars)
+
+#### E. Bounded Segment Contribution Formula
+The final mode-adjusted AQI risk factor score is:
+$$AQI\_Score = \min(100, \text{round}(S_{raw} \times M_{mode}))$$
+
+1. If $AQI\_Score = 0$ (e.g. AQI $\le 100$, or enclosed `car` with $AQI \le 300$ where $70 \times 0.15 = 10.5 \approx 10$, below actionable threshold), no risk factor is emitted.
+2. If $AQI\_Score \ge 20$, emit `RiskFactor(name="Air Quality", score=AQI_Score, level=..., description=...)`.
+3. **Strict Mathematical Bounding**: In segment risk aggregation, the Air Quality factor is weighted with bounded weight $w_{aqi} = 0.15$, ensuring that poor air quality alone **never** marks a route as impassable (`infeasible`), preserving the integrity of route feasibility.
+
+---
+
+### 2. Precipitation Risk with Deterministic Probability Weighting
 In `backend/app/decision_engine/risk_model.py`:
-- Currently: `precip_score = min(100, int(weather.precipitation_mm * 3.0))`
-- Enhanced: When `precipitation_probability` is available:
-  $$\text{effective\_precipitation} = \text{precipitation\_mm} \times \left(\frac{\text{precipitation\_probability}}{100}\right)$$
-  If probability $< 25\%$, precipitation risk is scaled down to prevent unwarranted travel cancellations for mere passing drizzles.
-  If probability $\ge 75\%$ and precipitation $\ge 10\text{mm}$, risk is elevated due to near-certain downpour.
-
-### 2. Air Quality Risk Factor for Outdoor Modes
-Air quality is evaluated deterministically in `calculate_segment_risk`:
-- **Enclosed Modes (`car`, `metro`)**: Negligible exposure (`multiplier = 0.1`). No significant risk added.
-- **Exposed Modes (`bike`, `walk`)**: Direct respiratory exposure (`multiplier = 1.0`):
-  - AQI 0–100 (Good / Moderate): Score 0.
-  - AQI 101–200 (Unhealthy for Sensitive): Score 25 (Low).
-  - AQI 201–300 (Unhealthy / Very Unhealthy): Score 55 (Moderate). Adds `RiskFactor(name="Air Quality", score=55, level=RiskLevel.moderate, description="Unhealthy air quality (AQI 240, PM2.5: 110 µg/m³). N95 mask advised for two-wheelers.")`.
-  - AQI 301–500 (Severe / Hazardous): Score 85 (High). Adds `RiskFactor` with Severe warning.
-- **Mathematical Bound**: Air quality factor is capped at weight 0.25 to prevent it from overwhelming road safety and flood hazards.
+- Base rainfall accumulation: $P_{mm} = \text{weather.precipitation\_mm}$
+- When `precipitation_probability` ($P_{prob} \in [0, 100]$) is present:
+  $$\text{effective\_precipitation} = P_{mm} \times \max\left(0.20, \frac{P_{prob}}{100.0}\right)$$
+- If $P_{prob} < 20\%$: Precipitation risk is bounded by a maximum score of $10$ (negligible risk) even if nominal model accumulation is non-zero, preventing false alarm trip cancellations for passing drizzles.
+- If $P_{prob} \ge 80\%$ and $P_{mm} \ge 10\text{mm}$: High risk is confirmed deterministically.
+- If $P_{prob}$ is omitted/None: Defaults safely to standard Accumulation-only formula (backward compatible).
 
 ---
 

@@ -1,7 +1,7 @@
 import httpx
 import logging
-from datetime import timedelta
-from typing import List
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from app.core.config import settings
 from app.providers.routing.base import RoutingProvider
@@ -43,7 +43,15 @@ class GoogleRoutesProvider(RoutingProvider):
             raise ConfigurationError("GOOGLE_MAPS_API_KEY is not configured in the environment.")
         return api_key
 
-    async def get_route(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, mode: TransportMode) -> List[NormalizedRoute]:
+    async def get_route(
+        self,
+        origin_lat: float,
+        origin_lng: float,
+        dest_lat: float,
+        dest_lng: float,
+        mode: TransportMode,
+        departure_time: Optional[datetime] = None
+    ) -> List[NormalizedRoute]:
         if mode == TransportMode.metro:
             raise UnsupportedModeError("Google Routes API does not support our required public transit metro routes.")
             
@@ -53,7 +61,9 @@ class GoogleRoutesProvider(RoutingProvider):
         api_key = self._get_api_key()
         travel_mode = self.MODE_MAPPING[mode]
         
-        request_body = self._build_request(origin_lat, origin_lng, dest_lat, dest_lng, travel_mode)
+        request_body = self._build_request(
+            origin_lat, origin_lng, dest_lat, dest_lng, travel_mode, departure_time=departure_time
+        )
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -84,8 +94,16 @@ class GoogleRoutesProvider(RoutingProvider):
             
         return self._parse_response(data)
 
-    def _build_request(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, travel_mode: str) -> dict:
-        return {
+    def _build_request(
+        self,
+        origin_lat: float,
+        origin_lng: float,
+        dest_lat: float,
+        dest_lng: float,
+        travel_mode: str,
+        departure_time: Optional[datetime] = None
+    ) -> dict:
+        body = {
             "origin": {
                 "location": {
                     "latLng": {
@@ -105,6 +123,18 @@ class GoogleRoutesProvider(RoutingProvider):
             "travelMode": travel_mode,
             "computeAlternativeRoutes": True
         }
+
+        # Live Traffic: Enable TRAFFIC_AWARE for vehicular modes when departure_time is provided
+        if settings.google_traffic_aware and travel_mode in ("DRIVE", "TWO_WHEELER"):
+            body["routingPreference"] = "TRAFFIC_AWARE"
+            dep = departure_time or datetime.now(timezone.utc)
+            if dep.tzinfo is None:
+                dep = dep.replace(tzinfo=timezone.utc)
+            else:
+                dep = dep.astimezone(timezone.utc)
+            body["departureTime"] = dep.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        return body
 
     def _parse_duration(self, duration_str: str) -> timedelta:
         # Google returns duration as "345s"

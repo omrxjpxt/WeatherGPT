@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Any
 import uuid
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,9 @@ class NormalizedWeatherPoint(BaseModel):
     condition: str
     is_extreme_heat: bool
     is_poor_visibility: bool
+    # Phase 20 Intelligence Fields:
+    precipitation_probability: Optional[float] = None # 0.0 - 100.0 %
+    precipitation_intensity_category: Optional[str] = None # "none" | "light" | "moderate" | "heavy" | "violent"
 
 class NormalizedRouteSegment(BaseModel):
     start_lat: float
@@ -93,3 +96,6 @@ class TripContext(BaseModel):
     arrival_deadline: Optional[datetime] = None
     agreement_status: str = "high"
     traffic: Optional[TrafficSnapshot] = None
+    # Phase 20 Intelligence Fields:
+    air_quality_timeline: Optional[List[Any]] = None
+    geocoding_provenance: Optional[dict[str, str]] = None

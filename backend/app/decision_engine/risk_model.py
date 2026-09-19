@@ -1,8 +1,8 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Any
 from datetime import datetime
 
 from app.models.enums import RiskLevel, TransportMode
-from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard
+from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard, HazardRelevanceResult
 from app.decision_engine.exposure import get_mode_exposure_multiplier
 from app.models.risk import RiskFactor
 from app.decision_engine.spatial import point_to_segment_distance_km
@@ -10,17 +10,102 @@ from app.decision_engine.spatial import point_to_segment_distance_km
 # Engineering assumption for MVP: Hazard affects segment if within this radius
 HAZARD_PROXIMITY_RADIUS_KM = 2.0
 
+
 def _calculate_precipitation_score(weather: NormalizedWeatherPoint) -> int:
     """
-    Isolated precipitation scoring function.
+    Isolated precipitation scoring function with deterministic probability weighting.
     
-    ENGINEERING ASSUMPTION (MVP):
-    Precipitation risk is scored as a linear scalar of hourly accumulation (mm).
-    This assumes `precipitation_mm` acts as a proxy for intensity over the hour.
+    ENGINEERING ASSUMPTION (Phase 20):
+    Precipitation risk is scaled by precipitation_probability (0-100%) when present.
+    If precipitation_probability is < 20%, precipitation risk is bounded to <= 10
+    to avoid false alarms for passing drizzles.
+    If probability is missing/None, falls back to legacy linear scalar of accumulation.
     """
-    return min(100, int(weather.precipitation_mm * 3.0))
+    if weather.precipitation_probability is None:
+        return min(100, int(weather.precipitation_mm * 3.0))
 
-from app.decision_engine.normalized_models import NormalizedRouteSegment, NormalizedWeatherPoint, NormalizedHazard, HazardRelevanceResult
+    prob_factor = max(0.20, weather.precipitation_probability / 100.0)
+    effective_mm = weather.precipitation_mm * prob_factor
+    raw_score = min(100, int(effective_mm * 3.0))
+
+    if weather.precipitation_probability < 20.0:
+        return min(10, raw_score)
+    return raw_score
+
+
+def calculate_aqi_risk_score(
+    aqi: int,
+    pm2_5: float,
+    mode: TransportMode,
+) -> Tuple[int, Optional[RiskFactor]]:
+    """
+    Calculates deterministic, bounded Air Quality risk contribution.
+    - US EPA Breakpoint harmonization with PM2.5 precedence
+    - Mode exposure multipliers:
+      - walk: 1.0
+      - bicycle / bike: 1.0
+      - car: 0.15
+      - metro: 0.10
+    - Base score mapping:
+      - <= 100: 0 (Good / Moderate)
+      - 101-150: 25 (Low)
+      - 151-200: 45 (Moderate)
+      - 201-300: 70 (Moderate)
+      - 301-400: 85 (High)
+      - > 400: 100 (Critical)
+    """
+    from app.providers.air_quality.base import calculate_us_aqi_from_pm25, classify_aqi_category
+
+    # PM2.5 precedence harmonization
+    pm25_aqi = calculate_us_aqi_from_pm25(pm2_5) if pm2_5 > 0 else 0
+    effective_aqi = max(aqi, pm25_aqi)
+
+    if effective_aqi <= 100:
+        s_raw = 0
+    elif effective_aqi <= 150:
+        s_raw = 25
+    elif effective_aqi <= 200:
+        s_raw = 45
+    elif effective_aqi <= 300:
+        s_raw = 70
+    elif effective_aqi <= 400:
+        s_raw = 85
+    else:
+        s_raw = 100
+
+    # Transport Mode Exposure Multipliers
+    if mode in (TransportMode.bike, TransportMode.walk):
+        m_mode = 1.0
+    elif mode == TransportMode.car:
+        m_mode = 0.15
+    elif mode == TransportMode.metro:
+        m_mode = 0.10
+    else:
+        m_mode = 1.0
+
+    final_aqi_score = min(100, int(round(s_raw * m_mode)))
+
+    if final_aqi_score < 20:
+        return 0, None
+
+    category = classify_aqi_category(effective_aqi)
+    level = _score_to_level(final_aqi_score)
+    advice = (
+        "N95 mask advised for two-wheelers and pedestrians."
+        if mode in (TransportMode.bike, TransportMode.walk)
+        else "Cabin air filtration recommended."
+    )
+    desc = f"{category} air quality (AQI {effective_aqi}, PM2.5: {pm2_5:.1f} µg/m³). {advice}"
+
+    factor = RiskFactor(
+        name="Air Quality",
+        description=desc,
+        score=final_aqi_score,
+        level=level,
+        weight=0.15,
+    )
+    return final_aqi_score, factor
+
 
 def calculate_segment_risk(
     segment: NormalizedRouteSegment,
@@ -28,6 +113,7 @@ def calculate_segment_risk(
     hazards: List[NormalizedHazard],
     mode: TransportMode,
     traffic_delay_seconds: float = 0.0,
+    air_quality: Optional[Any] = None,
 ) -> Tuple[int, RiskLevel, List[RiskFactor], str, List[HazardRelevanceResult]]:
     """
     Calculates risk for a specific segment.
@@ -35,7 +121,7 @@ def calculate_segment_risk(
     - user exposure (mode_multiplier)
     - temporal exposure (duration, including traffic delay)
     - route exposure (hazards on segment)
-    - hazard severity (weather conditions)
+    - hazard severity (weather conditions, air quality)
     """
     factors = []
     
@@ -48,7 +134,6 @@ def calculate_segment_risk(
     temporal_multiplier = min(2.0, max(0.5, duration_mins / 10.0))
     
     # 3. Hazard Severity (Weather)
-    # Precipitation risk (0-100)
     precip_score = _calculate_precipitation_score(weather)
     
     if precip_score > 0:
@@ -70,13 +155,21 @@ def calculate_segment_risk(
             level=RiskLevel.moderate,
             weight=0.2
         ))
+
+    # 4. Air Quality Evaluation (Deterministic & Bounded)
+    aqi_score = 0
+    if air_quality:
+        aqi_val = air_quality.get("aqi", 0) if isinstance(air_quality, dict) else getattr(air_quality, "aqi", 0)
+        pm25_val = air_quality.get("pm2_5", 0.0) if isinstance(air_quality, dict) else getattr(air_quality, "pm2_5", 0.0)
+        aqi_score, aqi_factor = calculate_aqi_risk_score(aqi_val, pm25_val, mode)
+        if aqi_factor:
+            factors.append(aqi_factor)
         
-    # 4. Route Exposure (Hazards intersecting this segment)
+    # 5. Route Exposure (Hazards intersecting this segment)
     segment_hazards_score = 0
     relevance_results = []
     
     for h in hazards:
-        # Spatial match using existing Haversine point-to-segment distance
         dist_km = point_to_segment_distance_km(
             h.lat, h.lng,
             segment.start_lat, segment.start_lng,
@@ -90,14 +183,12 @@ def calculate_segment_risk(
         relevance_reason = None
         
         if spatially_relevant:
-            # Weather trigger
             if h.trigger_precipitation_mm is not None and weather.precipitation_mm >= h.trigger_precipitation_mm:
                 weather_triggered = True
             elif h.trigger_condition is not None and h.trigger_condition.lower() in weather.condition.lower():
                 weather_triggered = True
                 
             if weather_triggered:
-                # Temporal overlap is implicitly true because we're evaluating the weather AT the passage time
                 currently_relevant = True
                 from app.core.config import settings
                 hazard_contribution = int(h.base_severity * settings.hazard_influence_factor)
@@ -117,14 +208,19 @@ def calculate_segment_risk(
             hazard_id=h.id,
             spatially_relevant=spatially_relevant,
             weather_triggered=weather_triggered,
-            temporally_relevant=currently_relevant, # Temporal implies current passage overlap
+            temporally_relevant=currently_relevant,
             currently_relevant=currently_relevant,
             relevance_reason=relevance_reason,
             contribution_score=hazard_contribution
         ))
 
-    # Combine
-    base_environmental_risk = (precip_score * 0.4) + (60 if weather.is_poor_visibility else 0) * 0.2 + (segment_hazards_score * 0.3)
+    # Combine: precipitation (0.40) + visibility (0.20) + hazards (0.30) + aqi (0.15)
+    base_environmental_risk = (
+        (precip_score * 0.4)
+        + ((60 if weather.is_poor_visibility else 0) * 0.2)
+        + (segment_hazards_score * 0.3)
+        + (aqi_score * 0.15)
+    )
     
     # Apply exposure multipliers
     final_score = int(base_environmental_risk * mode_multiplier * temporal_multiplier)
@@ -135,8 +231,10 @@ def calculate_segment_risk(
     
     return final_score, level, factors, reason, relevance_results
 
+
 def _score_to_level(score: int) -> RiskLevel:
     if score >= 75: return RiskLevel.severe
     if score >= 50: return RiskLevel.high
     if score >= 25: return RiskLevel.moderate
     return RiskLevel.low
+

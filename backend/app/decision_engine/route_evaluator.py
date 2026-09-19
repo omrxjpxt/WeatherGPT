@@ -1,6 +1,6 @@
 import functools
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 
 from app.decision_engine.engine import DecisionEngine
 from app.decision_engine.models import EngineDecisionResult
@@ -111,7 +111,8 @@ class RouteEvaluator:
         hazards: List[NormalizedHazard],
         alerts: List[NormalizedAlert],
         traffic: Optional[TrafficSnapshot],
-        agreement_status: str = "high"
+        agreement_status: str = "high",
+        air_quality_timeline: Optional[List[Any]] = None,
     ) -> EvaluatedRoute:
         """
         Evaluates a single route independently through the deterministic decision engine.
@@ -127,7 +128,8 @@ class RouteEvaluator:
             alerts=alerts,
             arrival_deadline=request.arrival_deadline,
             agreement_status=agreement_status,
-            traffic=traffic
+            traffic=traffic,
+            air_quality_timeline=air_quality_timeline,
         )
 
         engine_res = self.engine.evaluate_route_core(ctx)

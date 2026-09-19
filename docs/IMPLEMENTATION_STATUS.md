@@ -6,16 +6,20 @@
 
 | Provider | Type | Source Class | Implementation Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Open-Meteo** | Weather | Primary | ✅ Complete `[VERIFIED]` | Offline normalization active. |
+| **Open-Meteo** | Weather | Primary | ✅ Complete `[VERIFIED]` | Hourly precipitation probability & intensity category active. |
+| **Open-Meteo / CAMS** | Air Quality | Primary | ✅ Complete `[VERIFIED]` | Copernicus CAMS hourly AQI + PM2.5 with US EPA piecewise formula. |
 | **WeatherAPI** | Weather/Alerts | Secondary | ✅ Complete `[VERIFIED]` | Strict `[SECONDARY]` fallback and comparison logic implemented. |
+| **Google Geocoding** | Geocoding | Primary | ✅ Complete `[VERIFIED]` | Rooftop/landmark resolution with confidence scoring. |
+| **Nominatim (OSM)** | Geocoding | Secondary | ✅ Complete `[VERIFIED]` | Rate-limited (1.05s lock) fallback with ambiguity penalty. |
+| **Open-Meteo Geocoding** | Geocoding | Tertiary | ✅ Complete `[VERIFIED]` | Priority India GeoNames resolution. |
+| **Curated NCR Gazetteer**| Geocoding | Quaternary | ✅ Complete `[VERIFIED]` | 50+ offline landmarks/sectors with explicit `[OFFLINE_CURATED]` provenance. |
 | **Mock Alerts** | Alerts | Demo | ✅ Complete `[DEMO]` | Obeys `demo_mode` override eligibility. |
 | **Curated Hazards** | Hazards | Govt/Demo | ✅ Complete `[VERIFIED]` | Historical susceptibility activated by live weather. |
 | **IMD Direct API** | Alerts | Authoritative | ❌ `[UNAVAILABLE]` | Direct integration blocked by IP whitelisting constraints. |
-| **Google Maps** | Routing | Secondary | ✅ Complete `[VERIFIED]` | Offline routes implementation complete. |
-| **Mapbox** | Routing | Secondary | ❌ Discarded | Discarded in favor of Google Maps integration. |
+| **Google Routes** | Routing | Primary | ✅ Complete `[VERIFIED]` | `TRAFFIC_AWARE` preference + departureTime propagation. |
 | **Mock Routing** | Routing | Demo | ✅ Complete `[DEMO]` | Used for fallback/demo transit paths. |
 | **Mock Traffic** | Traffic | Demo | ✅ Complete `[VERIFIED]` | Strictly deterministic mock provider with explicit demo/mock provenance. Free-flow on walk/metro, rush-hour delay for motorized modes. |
-| **TomTom/Google** | Traffic | Primary | ⏳ Planned | Live provider interface ready; awaiting verified production API credentials. |
+| **Mock Air Quality** | Air Quality | Demo | ✅ Complete `[VERIFIED]` | Configurable PM2.5, AQI, staleness, and degradation testing. |
 | **Mock LLM** | LLM | Demo | ✅ Complete `[VERIFIED]` | Pattern-based deterministic parser for English/Hindi/Hinglish; grounded natural language explanation generation with `GroundingValidator`. Explicit `demo/mock` provenance. |
 | **Gemini LLM** | LLM | Secondary | ✅ Complete `[VERIFIED ADAPTER]` | Full Google GenAI provider adapter ready; activates upon setting production API key. |
 
@@ -185,9 +189,37 @@
   - Flutter Tests: **63/63 passing** (`flutter test`).
   - Backend Test Suite: **146/146 passing** (`pytest backend/tests`), up from 123.
 
+## Phase 20: Intelligence & Data Provider Expansion (Complete)
+- 🟢 **Deterministic Air Quality Decision Model**:
+  - Open-Meteo Copernicus Atmosphere Monitoring Service (CAMS) provider implementation.
+  - Piecewise linear conversion from real-time $PM_{2.5}$ ($\mu g/m^3$) to US EPA AQI (0–500 scale) with hourly CAMS AQI fallback.
+  - Mode-specific physical exposure multipliers: Walking ($1.0\times$), Cycling/Motorcycle ($1.0\times$), Private Enclosed Car ($0.15\times$), Metro/Transit ($0.10\times$).
+  - Bounded AQI risk contribution: Maximum $\le 25$ points for enclosed transport modes; maximum $\le 95$ points for active modes.
+  - Stale observation detection: Timestamps $> 6$ hours flagged as `is_stale=True`.
+  - Truthful provider degradation: Outages return `AirQualityStatus.unavailable` without fabricating missing data.
+  - Alert Precedence Invariant: Authoritative emergency weather alerts take absolute precedence over clean air observations.
+- 🟢 **Confidence-Aware Geocoding Architecture**:
+  - `GeocodingProvider` interface with structured `GeocodingResult` tracking query, coordinates, display name, provider, result type, confidence score ($0.0 \le c \le 1.0$), `is_exact`, and provenance.
+  - Multi-tier fallback chain: `GoogleGeocodingProvider` $\rightarrow$ `NominatimGeocodingProvider` $\rightarrow$ `OpenMeteoGeocodingProvider` $\rightarrow$ `CuratedGazetteerProvider`.
+  - Rate limiting: Nominatim outbound traffic governed by $1.05$-second token lock.
+  - Ambiguity & low-confidence rejection: Queries with confidence $< 0.50$ or non-NCR matches raise `GeocodingResolutionError` (mapped to HTTP 400 Bad Request) rather than passing inaccurate coordinates into routing.
+  - Complete removal of legacy `_mock_geocode` from production flow; offline fallbacks explicitly marked `provenance = OFFLINE_CURATED`.
+- 🟢 **Live Traffic Intelligence on Routing**:
+  - `GoogleRoutesProvider` passes `routingPreference: "TRAFFIC_AWARE"` and RFC 3339 `departureTime` for motorized transport modes (`car`, `motorcycle`).
+  - Static route duration and traffic-aware delay are tracked and stored separately in `TrafficMetrics` without double-counting.
+- 🟢 **Precipitation Probability & Intensity Modeling**:
+  - Hourly precipitation probability (0–100%) and intensity classification (`none`, `light`, `moderate`, `heavy`, `violent`) extracted from Open-Meteo.
+  - Bounded precipitation risk score ($\le 10$ points when probability $< 20\%$).
+- 🟢 **Concurrency & Deterministic Invariance**:
+  - `TripService` executes geocoding, primary/secondary weather, alerts, routing, and air quality concurrently via `asyncio.gather`.
+  - 10x repeated evaluation testing confirms bit-identical risk scores, tiers, and route recommendations across concurrent execution.
+- 🟢 **Test Verification**:
+  - Flutter Analysis: **0 issues** (`flutter analyze`).
+  - Flutter Tests: **63/63 passing** (`flutter test`).
+  - Backend Test Suite: **165/165 passing** (`pytest backend/tests`), up from 146.
+
 ## Currently Pending
-- Production API credentials for Google Routes API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
-- Production Traffic Provider (TomTom / Google Traffic).
+- Production API credentials for Google Routes / Geocoding API (`GOOGLE_MAPS_API_KEY`), WeatherAPI (`WEATHERAPI_API_KEY`), and Gemini LLM (`LLM_API_KEY` / `GEMINI_API_KEY`).
 - Direct authoritative IMD CAP integration (pending government IP whitelisting).
 
 

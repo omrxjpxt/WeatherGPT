@@ -80,11 +80,17 @@ The deterministic Decision Engine remains the sole authority for:
 - Sliding-window rate limiting protects expensive APIs with HTTP 429 and `Retry-After`.
 - Mobile release packaging provides clean release manifests (Android INTERNET permissions) and display name configuration.
 
+### 8. Intelligence & Data Provider Architecture (Phase 20)
+- **Confidence-Aware Geocoding**: Multi-tier fallback chain (`Google` $\rightarrow$ `Nominatim` $\rightarrow$ `Open-Meteo` $\rightarrow$ `Curated NCR Gazetteer`) tracking coordinate provenance and confidence. Low-confidence queries ($< 0.50$) or ambiguous queries are rejected via `GeocodingResolutionError` (HTTP 400). Legacy mock geocoding is eliminated in production.
+- **Deterministic Air Quality Decision Model**: Copernicus CAMS API integrates real-time AQI and $PM_{2.5}$. Converts $PM_{2.5}$ using US EPA piecewise linear formula, applies mode-specific physical exposure multipliers (walking/cycling $1.0\times$, car $0.15\times$, metro $0.10\times$), and bounds AQI risk contribution strictly ($\le 25$ for enclosed modes). Stale observations ($> 6$h) are flagged and official alerts retain unconditional safety precedence.
+- **Traffic-Aware Routing**: `GoogleRoutesProvider` passes `TRAFFIC_AWARE` preference and `departureTime` for motorized modes, cleanly separating static duration from traffic delay.
+- **Precipitation Probability**: Open-Meteo probability (0–100%) scales precipitation risk deterministically, bounding risk score to $\le 10$ when probability $< 20\%$.
+
 ---
 
 ## System Test Metrics
 
 - **Flutter Analyze:** 0 issues
 - **Flutter Test Suite:** 63/63 tests passing
-- **Backend Test Suite:** 146/146 tests passing
+- **Backend Test Suite:** 165/165 tests passing
 

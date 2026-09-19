@@ -16,6 +16,11 @@ from app.providers.traffic.fallback import UnavailableTrafficProvider
 from app.models.hazard import Hazard
 from app.models.enums import RiskLevel
 
+from app.providers.geocoding.base import GeocodingProvider, GeocodingResolutionError
+from app.providers.geocoding.fallback import FallbackGeocodingProvider
+from app.providers.geocoding.gazetteer import CuratedGazetteerGeocodingProvider
+from app.providers.air_quality.base import AirQualityProvider, AirQualitySnapshot
+
 class TripService:
     def __init__(
         self,
@@ -27,6 +32,8 @@ class TripService:
         secondary_alert_provider: Optional[AlertProvider] = None,
         hazard_repository: Optional['app.repositories.interfaces.hazard_repository.HazardRepository'] = None,
         trip_repository: Optional['app.repositories.interfaces.trip_repository.TripRepository'] = None,
+        geocoding_provider: Optional[GeocodingProvider] = None,
+        air_quality_provider: Optional[AirQualityProvider] = None,
     ):
         self.weather_provider = weather_provider
         self.routing_provider = routing_provider
@@ -36,21 +43,14 @@ class TripService:
         self.secondary_alert_provider = secondary_alert_provider
         self.hazard_repository = hazard_repository
         self.trip_repository = trip_repository
+        self.geocoding_provider = geocoding_provider or FallbackGeocodingProvider(
+            providers=[CuratedGazetteerGeocodingProvider()]
+        )
+        self.air_quality_provider = air_quality_provider
         
         self.engine = DecisionEngine()
         self.route_evaluator = RouteEvaluator(self.engine)
         self._metro_provider = MockRoutingProvider()
-
-    def _mock_geocode(self, location: str) -> Tuple[float, float]:
-        """
-        Temporary development resolver. 
-        In the future, this will be replaced by a GeocodingProvider.
-        """
-        location = location.lower()
-        if "gurgaon" in location or "cyber hub" in location:
-            return 28.4942, 77.0860
-        # Default to Noida Sector 62
-        return 28.6270, 77.3650
 
     def _evaluate_alert_policy(self, alerts: List['NormalizedAlert']) -> List['NormalizedAlert']:
         """
@@ -74,18 +74,46 @@ class TripService:
         return alerts
 
     async def analyze_trip(self, request: TripRequest, uid: Optional[str] = None) -> TripResponse:
-        origin_lat, origin_lng = self._mock_geocode(request.origin)
-        dest_lat, dest_lng = self._mock_geocode(request.destination)
+        import asyncio
+        from app.decision_engine.source_comparison import compare_weather_sources
+
+        # 1. Resolve Origin and Destination via Confidence-Aware Geocoder
+        origin_res, dest_res = await asyncio.gather(
+            self.geocoding_provider.geocode(request.origin),
+            self.geocoding_provider.geocode(request.destination),
+        )
+
+        if not origin_res:
+            raise GeocodingResolutionError(
+                message=f"Could not resolve origin '{request.origin}' with sufficient confidence.",
+                query=request.origin,
+                status="unresolved_origin",
+            )
+        if not dest_res:
+            raise GeocodingResolutionError(
+                message=f"Could not resolve destination '{request.destination}' with sufficient confidence.",
+                query=request.destination,
+                status="unresolved_destination",
+            )
+
+        origin_lat, origin_lng = origin_res.lat, origin_res.lng
+        dest_lat, dest_lng = dest_res.lat, dest_res.lng
+
+        geocoding_provenance = {
+            "origin_provider": origin_res.provider,
+            "origin_provenance": origin_res.provenance.value if hasattr(origin_res.provenance, "value") else str(origin_res.provenance),
+            "origin_confidence": str(origin_res.confidence),
+            "destination_provider": dest_res.provider,
+            "destination_provenance": dest_res.provenance.value if hasattr(dest_res.provenance, "value") else str(dest_res.provenance),
+            "destination_confidence": str(dest_res.confidence),
+        }
         
         active_routing_provider = self._metro_provider if request.mode == TransportMode.metro else self.routing_provider
         routing_provider_name = active_routing_provider.provider_name
         if request.mode == TransportMode.metro:
             routing_provider_name = f"{routing_provider_name} (Demo Transit)"
-            
-        import asyncio
-        from app.decision_engine.source_comparison import compare_weather_sources
 
-        # 1. Concurrently fetch independent upstream provider data
+        # 2. Concurrently fetch independent upstream provider data
         async def fetch_primary_weather():
             try:
                 return await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
@@ -125,7 +153,7 @@ class TripService:
         async def fetch_routing():
             try:
                 routes = await active_routing_provider.get_route(
-                    origin_lat, origin_lng, dest_lat, dest_lng, request.mode
+                    origin_lat, origin_lng, dest_lat, dest_lng, request.mode, departure_time=request.departure_time
                 )
                 routing_status = active_routing_provider.route_status.value
                 return routes, routing_status, None
@@ -134,12 +162,25 @@ class TripService:
                 logging.getLogger(__name__).error(f"Routing failed: {e}")
                 return None, "unavailable", e
 
-        # Execute weather, secondary weather, alerts, and routing in parallel
-        weather_p, weather_s, raw_alerts, (routes, routing_status, routing_err) = await asyncio.gather(
+        async def fetch_air_quality():
+            if not self.air_quality_provider:
+                return None
+            try:
+                return await self.air_quality_provider.get_air_quality(
+                    origin_lat, origin_lng, request.departure_time, hours=6
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Air quality fetch failed: {e}")
+                return None
+
+        # Execute weather, secondary weather, alerts, routing, and air quality in parallel
+        weather_p, weather_s, raw_alerts, (routes, routing_status, routing_err), aqi_timeline = await asyncio.gather(
             fetch_primary_weather(),
             fetch_secondary_weather(),
             fetch_alerts(),
-            fetch_routing()
+            fetch_routing(),
+            fetch_air_quality(),
         )
 
         comparison = compare_weather_sources(weather_p, weather_s)
@@ -239,7 +280,8 @@ class TripService:
                 hazards=route_hazards,
                 alerts=alerts,
                 traffic=traffic,
-                agreement_status=comparison.agreement_status.value
+                agreement_status=comparison.agreement_status.value,
+                air_quality_timeline=aqi_timeline,
             )
 
         # Preserve deterministic route ordering with asyncio.gather
@@ -263,6 +305,37 @@ class TripService:
             traffic = selected_route.traffic
             traffic_status_str = traffic.status.value if hasattr(traffic.status, "value") else str(traffic.status)
             sources.append(DataSource(name=traffic.source_name, type=f"Traffic [{traffic_status_str}]", last_updated=traffic.timestamp))
+
+        # Build Air Quality Snapshot & Provenance
+        air_quality_snapshot = None
+        if aqi_timeline:
+            dep_utc = request.departure_time if request.departure_time.tzinfo else request.departure_time.replace(tzinfo=timezone.utc)
+            rep_pt = min(aqi_timeline, key=lambda pt: abs((pt.time - dep_utc).total_seconds()))
+            air_quality_snapshot = AirQualitySnapshot(
+                aqi=rep_pt.aqi,
+                pm2_5=rep_pt.pm2_5,
+                pm10=rep_pt.pm10,
+                category=rep_pt.category,
+                source_name=rep_pt.source_name,
+                is_available=True,
+                is_stale=rep_pt.is_stale,
+                observation_time=rep_pt.observation_time,
+                provenance="live_provider",
+            )
+            sources.append(DataSource(name=rep_pt.source_name, type="Air Quality [CAMS]", last_updated=datetime.now(timezone.utc)))
+        elif self.air_quality_provider:
+            # Truthful degraded representation when provider fails or returns empty
+            air_quality_snapshot = AirQualitySnapshot(
+                aqi=0,
+                pm2_5=0.0,
+                pm10=0.0,
+                category="Unavailable",
+                source_name=self.air_quality_provider.provider_name,
+                is_available=False,
+                is_stale=False,
+                observation_time=None,
+                provenance="degraded",
+            )
 
         if self.secondary_weather_provider and comparison.secondary_timeline:
             sources.append(DataSource(name=self.secondary_weather_provider.provider_name, type="Weather (Secondary)", last_updated=datetime.now(timezone.utc)))
@@ -294,7 +367,9 @@ class TripService:
             estimated_duration=selected_route.static_duration,
             distance_km=selected_route.distance_km,
             traffic=selected_route.traffic,
-            routes=ranked_routes
+            routes=ranked_routes,
+            air_quality=air_quality_snapshot,
+            geocoding_provenance=geocoding_provenance,
         )
 
         if uid and self.trip_repository:

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 from app.models.enums import TransportMode, RouteStatus
 from app.decision_engine.normalized_models import NormalizedRoute
 
@@ -17,6 +18,15 @@ class RoutingProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_route(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, mode: TransportMode) -> List[NormalizedRoute]:
-        """Get route(s) between coordinates for mode."""
+    async def get_route(
+        self,
+        origin_lat: float,
+        origin_lng: float,
+        dest_lat: float,
+        dest_lng: float,
+        mode: TransportMode,
+        departure_time: Optional[datetime] = None
+    ) -> List[NormalizedRoute]:
+        """Get route(s) between coordinates for mode, optionally considering departure time and live traffic."""
         pass
+

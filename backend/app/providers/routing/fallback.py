@@ -1,5 +1,6 @@
+from datetime import datetime
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.providers.routing.base import RoutingProvider
 from app.models.enums import TransportMode, RouteStatus
@@ -26,11 +27,21 @@ class FallbackRoutingProvider(RoutingProvider):
     def route_status(self) -> RouteStatus:
         return self._last_status
 
-    async def get_route(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, mode: TransportMode) -> List[NormalizedRoute]:
+    async def get_route(
+        self,
+        origin_lat: float,
+        origin_lng: float,
+        dest_lat: float,
+        dest_lng: float,
+        mode: TransportMode,
+        departure_time: Optional[datetime] = None,
+    ) -> List[NormalizedRoute]:
         self._last_provider_name = self.primary.provider_name
         
         try:
-            routes = await self.primary.get_route(origin_lat, origin_lng, dest_lat, dest_lng, mode)
+            routes = await self.primary.get_route(
+                origin_lat, origin_lng, dest_lat, dest_lng, mode, departure_time=departure_time
+            )
             self._last_status = self.primary.route_status
             return routes
         except RoutingError as e:

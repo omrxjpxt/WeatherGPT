@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from app.decision_engine.models import EngineDecisionResult, SegmentRisk
 from app.decision_engine.normalized_models import TripContext, NormalizedWeatherPoint
 from app.decision_engine.temporal_alignment import align_route_with_weather
@@ -93,12 +93,26 @@ class DecisionEngine:
             effective_sec = seg.estimated_duration.total_seconds() + seg_delay_sec
             seg_durations.append(effective_sec)
 
+            # Select matching air quality observation if available
+            aqi_point = None
+            if ctx.air_quality_timeline:
+                arr_utc = arrival_time if arrival_time.tzinfo else arrival_time.replace(tzinfo=timezone.utc)
+                def _pt_time_diff(pt):
+                    t = pt.get("time") if isinstance(pt, dict) else getattr(pt, "time", None)
+                    if t is None:
+                        return float("inf")
+                    if t.tzinfo is None:
+                        t = t.replace(tzinfo=timezone.utc)
+                    return abs((t - arr_utc).total_seconds())
+                aqi_point = min(ctx.air_quality_timeline, key=_pt_time_diff)
+
             score, level, factors, reason, relevance_results = calculate_segment_risk(
                 segment=seg,
                 weather=weather,
                 hazards=ctx.hazards,
                 mode=ctx.mode,
-                traffic_delay_seconds=seg_delay_sec
+                traffic_delay_seconds=seg_delay_sec,
+                air_quality=aqi_point,
             )
             
             segment_risks.append(SegmentRisk(

@@ -170,3 +170,61 @@ WeatherGPT is transitioning from a prototype to a real production application. T
 - **Negative**:
   - In-memory rate limiting is node-local; if scaled across multiple container replicas, a distributed Redis/Memcached cache would be needed.
 
+## ADR-005: Intelligence & Data Provider Expansion (Air Quality, Geocoding, Traffic & Precipitation)
+
+### Status
+**Accepted** (Phase 20)
+
+### Context
+Phase 20 expands WeatherGPT's intelligence layer to include real-world geocoding resolution, live traffic duration on route polylines, precipitation probability modeling, and air quality risk assessment. In expanding provider capabilities, two core architectural imperatives must be preserved:
+1. **Air Quality Decision Model Must Be Deterministic & Bounded**: Air quality observations must map predictably to risk without fuzzy weights or arbitrary overrides. Exposure is physically mode-dependent (active cyclists/pedestrians breathe ambient air directly; enclosed car/metro commuters experience filtered cabin environments). Missing or stale AQI data must never be fabricated, and clean AQI must never override official emergency alerts.
+2. **Geocoding Must Be Confidence-Aware**: Blindly accepting geocoding results causes erroneous routing to arbitrary coordinates. Geocoding results must track confidence, precision type, and provenance, and low-confidence or ambiguous locations must be rejected explicitly rather than silently routed. Legacy mock geocoders must not exist in production.
+
+### Decision
+1. **Explicit, Deterministic Air Quality Risk Model**:
+   - **Provider**: Copernicus Atmosphere Monitoring Service (CAMS) via Open-Meteo API (`AirQualityProvider`).
+   - **Precedence**: Real-time $PM_{2.5}$ ($\mu g/m^3$) takes precedence, converted via the US EPA piecewise linear formula to AQI (0–500 scale). Hourly European/US AQI is used as fallback.
+   - **Thresholds & Base Risk**:
+     - AQI 0–50 (Good): 0 risk points
+     - AQI 51–100 (Moderate): 15 risk points
+     - AQI 101–150 (Unhealthy for Sensitive Groups): 35 risk points
+     - AQI 151–200 (Unhealthy): 55 risk points
+     - AQI 201–300 (Very Unhealthy): 75 risk points
+     - AQI 301–500 (Hazardous): 95 risk points
+   - **Mode-Specific Exposure Multipliers**:
+     - `walk`: $1.0\times$ (full exposure)
+     - `bicycle` / `motorcycle`: $1.0\times$ (full exposure)
+     - `car`: $0.15\times$ (cabin air filtration)
+     - `metro`: $0.10\times$ (enclosed underground/elevated filtered transit)
+   - **Bounded Risk Contribution**: Maximum AQI risk factor contribution is strictly bounded to $\le 25$ points for enclosed modes and $\le 95$ for active modes.
+   - **Staleness & Degradation**: Observations older than 6 hours are marked `is_stale=True`. Provider failures produce truthful `AirQualityStatus.unavailable`. Missing AQI is never fabricated.
+   - **Safety Override Invariant**: Authoritative emergency weather alerts take absolute precedence over clean air observations.
+
+2. **Confidence-Aware Geocoding Architecture**:
+   - **Abstraction**: `GeocodingProvider` returning structured `GeocodingResult` with: `query`, `lat`, `lng`, `display_name`, `provider`, `result_type` (`rooftop`, `landmark`, `locality`, `administrative`), `confidence` ($0.0 \le c \le 1.0$), `is_exact`, `timestamp`, and `provenance` (`live_api`, `offline_curated`, `mock_fixed`).
+   - **Fallback Chain**: `GoogleGeocodingProvider` $\rightarrow$ `NominatimGeocodingProvider` $\rightarrow$ `OpenMeteoGeocodingProvider` $\rightarrow$ `CuratedGazetteerProvider` (50+ Delhi-NCR hubs/sectors).
+   - **Rate Limiting**: Nominatim is governed by an asynchronous token lock enforcing $\ge 1.05$s between outbound requests.
+   - **Ambiguity & Low-Confidence Rejection**: Results with confidence $< 0.50$ or ambiguous non-NCR matches are rejected, raising `GeocodingResolutionError` (mapped to HTTP 400 Bad Request) rather than passing inaccurate coordinates into routing.
+   - **Mock Removal**: Legacy hardcoded `_mock_geocode` is completely removed from production `TripService`. Offline fallbacks are explicitly marked `provenance = OFFLINE_CURATED`.
+
+3. **Live Traffic Intelligence**:
+   - `GoogleRoutesProvider` passes `routingPreference: "TRAFFIC_AWARE"` and RFC 3339 `departureTime` for motorized modes (`car`, `motorcycle`).
+   - Static route duration and traffic-aware delay are tracked and stored separately in `TrafficMetrics` without double-counting.
+
+4. **Precipitation Probability Modeling**:
+   - Open-Meteo hourly weather observations fetch `precipitation_probability` (0–100%) and classify intensity (`none`, `light`, `moderate`, `heavy`, `violent`).
+   - Deterministic risk scaling: when precipitation probability $< 20\%$, precipitation risk score is bounded to $\le 10$ points; when probability $\ge 70\%$ with heavy intensity, full risk weighting applies.
+
+5. **Exclusion of Extraneous Providers**:
+   - Extraneous providers (TomTom, RainViewer, Tomorrow.io, WAQI, Ensemble APIs) are explicitly excluded to maintain architectural simplicity, zero unneeded external credentials, and optimal testability.
+
+### Consequences
+- **Positive**:
+  - Truthful, multi-layered geocoding with robust fallback from Google to OpenStreetMap Nominatim, Open-Meteo, and Curated NCR gazetteer.
+  - Mathematically sound, physically realistic air quality exposure assessments for cyclists, motorists, and pedestrians across Delhi-NCR.
+  - Complete elimination of silent mock geocoding in production.
+  - 100% determinism maintained: 10x repeated evaluations produce bit-identical results.
+  - Complete test coverage: 165 backend tests and 63 Flutter tests pass.
+- **Negative**:
+  - Strict geocoding confidence threshold ($0.50$) will reject highly ambiguous queries (e.g., single generic words like "street"), requiring users to supply at least a locality or city context.
+

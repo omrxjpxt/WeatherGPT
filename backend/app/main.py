@@ -112,6 +112,23 @@ app.add_middleware(
 )
 
 
+from app.providers.geocoding.base import GeocodingResolutionError
+
+@app.exception_handler(GeocodingResolutionError)
+async def geocoding_exception_handler(request: Request, exc: GeocodingResolutionError):
+    req_id = request.headers.get("X-Request-Id") or ""
+    headers = {"X-Request-Id": req_id} if req_id else {}
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": exc.message,
+            "status": exc.status,
+            "query": exc.query,
+        },
+        headers=headers,
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     req_id = request.headers.get("X-Request-Id") or ""

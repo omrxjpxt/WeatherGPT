@@ -99,7 +99,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         params = {
             "latitude": lat,
             "longitude": lng,
-            "hourly": "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,visibility",
+            "hourly": "temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,visibility",
             "timezone": "UTC",
             "forecast_hours": min(72, hours + 24) # Fetch enough hours to cover start_time
         }
@@ -145,12 +145,29 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                 wind_gusts = float(hourly["wind_gusts_10m"][i])
                 visibility = float(hourly["visibility"][i])
                 wmo_code = int(hourly["weather_code"][i])
+                precip_prob = (
+                    float(hourly["precipitation_probability"][i])
+                    if "precipitation_probability" in hourly and hourly["precipitation_probability"][i] is not None
+                    else None
+                )
             except (TypeError, ValueError, IndexError, KeyError) as e:
                 logger.error("open_meteo_missing_data", index=i, error=str(e))
                 raise OpenMeteoProviderError("Missing or invalid field in Open-Meteo response")
                 
             condition = self._normalize_weather_code(wmo_code)
             
+            # Categorize precipitation intensity
+            if precip <= 0.0:
+                intensity = "none"
+            elif precip < 2.5:
+                intensity = "light"
+            elif precip < 10.0:
+                intensity = "moderate"
+            elif precip < 50.0:
+                intensity = "heavy"
+            else:
+                intensity = "violent"
+
             forecast.append(NormalizedWeatherPoint(
                 time=dt,
                 temperature=temp,
@@ -162,6 +179,8 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                 condition=condition,
                 is_extreme_heat=temp > 40.0,
                 is_poor_visibility=visibility < 1000.0,
+                precipitation_probability=precip_prob,
+                precipitation_intensity_category=intensity,
             ))
             
             hours_collected += 1

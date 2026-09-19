@@ -1,6 +1,6 @@
 import asyncio
-from datetime import timedelta
-from typing import List
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 from app.providers.routing.base import RoutingProvider
 from app.models.enums import TransportMode, RouteStatus
 from app.decision_engine.normalized_models import NormalizedRoute, NormalizedRouteSegment
@@ -20,7 +20,15 @@ class MockRoutingProvider(RoutingProvider):
     def set_route_count(self, count: int) -> None:
         self.route_count = max(1, min(3, count))
 
-    async def get_route(self, origin_lat: float, origin_lng: float, dest_lat: float, dest_lng: float, mode: TransportMode) -> List[NormalizedRoute]:
+    async def get_route(
+        self,
+        origin_lat: float,
+        origin_lng: float,
+        dest_lat: float,
+        dest_lng: float,
+        mode: TransportMode,
+        departure_time: Optional[datetime] = None
+    ) -> List[NormalizedRoute]:
         await asyncio.sleep(0.05)
         
         if mode == TransportMode.metro:

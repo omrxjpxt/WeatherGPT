@@ -119,6 +119,28 @@ Payloads that omit `routes` or provide an empty list are fully supported for 100
 - `isSelected = True` is set on exactly one route deterministically selected by the backend.
 - The Flutter client tracks `activeRouteId` locally for user inspection; tapping alternative cards does not mutate `isSelected` or the backend recommendation.
 
+#### Air Quality Intelligence (`TripResponse.airQuality`)
+When air quality evaluation is active, `TripResponse.airQuality` contains an `AirQualitySnapshot` (optional, default `null` for backward compatibility):
+- `status`: `mock` | `live` | `unavailable` | `cached`
+- `aqi`: Optional[int] (US EPA scale 0–500)
+- `category`: Optional[str] (`Good`, `Moderate`, `Unhealthy for Sensitive Groups`, `Unhealthy`, `Very Unhealthy`, `Hazardous`)
+- `pm25`: Optional[float] ($\mu g/m^3$)
+- `pm10`: Optional[float] ($\mu g/m^3$)
+- `timeline`: List[`AirQualityPoint`]
+- `timestamp`: ISO-8601 datetime
+- `sourceName`: str (e.g. `"Copernicus CAMS via Open-Meteo"`)
+- `provenance`: str (`live_api` | `demo/mock` | `degraded`)
+- `isStale`: bool (True if observation is older than 6 hours)
+
+#### Geocoding Provenance (`TripResponse.geocodingProvenance`)
+Tracks origin and destination geocoding provenance and confidence:
+```json
+{
+  "origin": "Curated NCR Gazetteer [offline_curated]",
+  "destination": "Google Geocoding API [live_api]"
+}
+```
+Low-confidence geocoding queries ($< 0.50$) or ambiguous queries raise `GeocodingResolutionError` resulting in a clean `HTTP 400 Bad Request`.
 
 ### 3. Scenarios
 `POST /scenarios/evaluate`

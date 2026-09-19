@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     # External APIs
     weather_provider: str = "open-meteo" # "open-meteo" or "mock"
     routing_provider: str = "google" # "google" or "mock"
+    geocoding_provider: str = "auto" # "auto", "google", "nominatim", "open-meteo", "gazetteer", "mock"
+    air_quality_provider: str = "open-meteo" # "open-meteo", "mock", "disabled"
+    air_quality_enabled: bool = True
+    google_traffic_aware: bool = True
+    nominatim_user_agent: str = "WeatherGPT-Navigation/1.0 (https://github.com/weathergpt)"
     weather_api_key: Optional[str] = None
     traffic_api_key: Optional[str] = None
     llm_api_key: Optional[str] = None    # Provider Credentials

@@ -48,12 +48,19 @@ class MockLLMProvider(LLMProvider):
             origin = self._canonical_location(cand_origin)
             destination = self._canonical_location(cand_dest)
 
-        # Pattern: "... to ..." (English: from Noida to Gurgaon / Noida to Gurgaon)
+        # Pattern: "from ... to ..." (English: from Noida to Gurgaon)
         if not origin or not destination:
-            to_match = re.search(r"(?:from\s+)?([a-zA-Z0-9\s]+?)\s+to\s+([a-zA-Z0-9\s]+?)(?:\s+(?:by|via|at|for|tomorrow|today)|$|,|\?)", text, re.IGNORECASE)
-            if to_match:
-                origin = self._canonical_location(to_match.group(1).strip())
-                destination = self._canonical_location(to_match.group(2).strip())
+            from_to_match = re.search(r"from\s+([a-zA-Z0-9\s]+?)\s+to\s+([a-zA-Z0-9\s]+?)(?:\s+(?:by|via|at|for|tomorrow|today)|$|,|\?)", text, re.IGNORECASE)
+            if from_to_match:
+                origin = self._canonical_location(from_to_match.group(1).strip())
+                destination = self._canonical_location(from_to_match.group(2).strip())
+            else:
+                # Pattern: "... to ..."
+                to_match = re.search(r"([a-zA-Z0-9\s]+?)\s+to\s+([a-zA-Z0-9\s]+?)(?:\s+(?:by|via|at|for|tomorrow|today)|$|,|\?)", text, re.IGNORECASE)
+                if to_match:
+                    cand_orig = re.sub(r"^(?:i\s+(?:need|want)\s+to\s+(?:go|travel)\s+|go\s+)", "", to_match.group(1).strip(), flags=re.IGNORECASE).strip()
+                    origin = self._canonical_location(cand_orig)
+                    destination = self._canonical_location(to_match.group(2).strip())
 
         # Explicit preposition extraction
         in_match = re.search(r"(?:in|at|from)\s+([a-zA-Z0-9\s]+?)(?:,|\?|\s+can|\s+to|\s+by|\s+how|$)", text, re.IGNORECASE)
