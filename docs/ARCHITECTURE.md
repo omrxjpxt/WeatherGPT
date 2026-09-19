@@ -70,14 +70,16 @@ The deterministic Decision Engine remains the sole authority for:
 - Flutter explicitly labels past trip analyses in `ProfileScreen` with **"Historical Snapshot (Audit)"**.
 - Historical snapshots are never treated or presented as live weather conditions.
 
-### 6. Authentication Error Handling & Offline Fallback
-- `FirebaseInit.initialize()` is safely guarded with try-catch logic. If native Firebase configuration is absent or fails to initialize, the application does not crash; it logs a warning and falls back to offline/mock authentication mode.
-- `flutter test` executes 100% offline using `MockAuthService` and `MockUserRepository`, requiring zero native platform channels or network connectivity.
+### 7. Persistence Failure Isolation & Production Hardening
+- Background write tasks (`_safe_persist`, `_safe_save_message`) are error-isolated. Database timeouts or Firestore connection drops never block, delay, or modify live user responses.
+- Protected endpoints strictly enforce HTTP 401 on missing or invalid tokens, while token UID verification (`profile.uid = uid`) guarantees zero cross-user tampering.
+- Upstream provider degradation (routing, weather, traffic, hazards, LLM) gracefully produces typed degraded responses without hallucinating safety data or throwing 500 errors.
 
 ---
 
 ## System Test Metrics
 
 - **Flutter Analyze:** 0 issues
-- **Flutter Test Suite:** 58/58 tests passing
-- **Backend Test Suite:** 100/100 tests passing
+- **Flutter Test Suite:** 63/63 tests passing
+- **Backend Test Suite:** 123/123 tests passing
+

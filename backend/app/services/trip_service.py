@@ -286,6 +286,12 @@ class TripService:
 
         if uid and self.trip_repository:
             # Fire-and-forget to avoid blocking the user request
-            asyncio.create_task(self.trip_repository.save_trip_decision(uid, response))
+            async def _safe_persist():
+                try:
+                    await self.trip_repository.save_trip_decision(uid, response)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Background trip persistence failed for uid {uid}: {e}")
+            asyncio.create_task(_safe_persist())
 
         return response

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 
 from app.models.user import UserProfile, SavedRoute, TripHistorySummary, ConversationSummary
-from app.api.auth import get_current_user
+from app.api.auth import get_authenticated_user
 from app.api.dependencies import get_user_repository, get_trip_repository, get_conversation_repository
 from app.repositories.interfaces.user_repository import UserRepository
 from app.repositories.interfaces.trip_repository import TripRepository
@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("/me/profile", response_model=UserProfile)
 async def get_profile(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     uid = current_user["uid"]
@@ -29,18 +29,18 @@ async def get_profile(
 @router.put("/me/profile", response_model=UserProfile)
 async def update_profile(
     profile: UserProfile,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     uid = current_user["uid"]
-    if profile.uid != uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="UID mismatch")
+    # Authenticated Firebase UID is the sole identity authority
+    profile.uid = uid
     await user_repo.update_profile(uid, profile)
     return profile
 
 @router.get("/me/saved-routes", response_model=List[SavedRoute])
 async def get_saved_routes(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     uid = current_user["uid"]
@@ -49,7 +49,7 @@ async def get_saved_routes(
 @router.post("/me/saved-routes", response_model=SavedRoute)
 async def save_route(
     route: SavedRoute,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     uid = current_user["uid"]
@@ -59,7 +59,7 @@ async def save_route(
 @router.delete("/me/saved-routes/{saved_route_id}")
 async def delete_saved_route(
     saved_route_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     uid = current_user["uid"]
@@ -68,7 +68,7 @@ async def delete_saved_route(
 
 @router.get("/me/trips", response_model=List[TripHistorySummary])
 async def get_trips(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     trip_repo: TripRepository = Depends(get_trip_repository)
 ):
     uid = current_user["uid"]
@@ -77,7 +77,7 @@ async def get_trips(
 @router.get("/me/trips/{analysis_id}", response_model=TripResponse, response_model_by_alias=True)
 async def get_trip_detail(
     analysis_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     trip_repo: TripRepository = Depends(get_trip_repository)
 ):
     uid = current_user["uid"]
@@ -88,7 +88,7 @@ async def get_trip_detail(
 
 @router.get("/me/conversations", response_model=List[ConversationSummary])
 async def get_conversations(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_authenticated_user),
     conv_repo: ConversationRepository = Depends(get_conversation_repository)
 ):
     uid = current_user["uid"]

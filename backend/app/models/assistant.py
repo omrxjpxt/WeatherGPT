@@ -92,3 +92,4 @@ class AssistantChatResponse(WeatherBaseModel):
     clarification_prompt: Optional[str] = None
     provenance: str = "demo/mock"
     grounding_fallback_used: bool = False
+    conversation_id: Optional[str] = None

@@ -108,7 +108,8 @@ class AssistantService:
                 trip_response=None,
                 status="info",
                 provenance=self.llm_provider.provenance,
-                grounding_fallback_used=False
+                grounding_fallback_used=False,
+                conversation_id=conversation_id
             )
 
         if intent.user_intent == UserIntentEnum.alert_question:
@@ -119,7 +120,8 @@ class AssistantService:
                 trip_response=None,
                 status="info",
                 provenance=self.llm_provider.provenance,
-                grounding_fallback_used=False
+                grounding_fallback_used=False,
+                conversation_id=conversation_id
             )
 
         # 3. Deterministic Trip Request Validation
@@ -139,7 +141,8 @@ class AssistantService:
                 status="need_clarification",
                 clarification_prompt=prompt,
                 provenance=self.llm_provider.provenance,
-                grounding_fallback_used=False
+                grounding_fallback_used=False,
+                conversation_id=conversation_id
             )
 
         if not self.trip_service:
@@ -150,7 +153,8 @@ class AssistantService:
                 trip_response=None,
                 status="error",
                 provenance=self.llm_provider.provenance,
-                grounding_fallback_used=True
+                grounding_fallback_used=True,
+                conversation_id=conversation_id
             )
 
         # 4. Construct Validated TripRequest
@@ -205,12 +209,19 @@ class AssistantService:
             trip_response=trip_res,
             status=chat_status,
             provenance=self.llm_provider.provenance,
-            grounding_fallback_used=fallback_used
+            grounding_fallback_used=fallback_used,
+            conversation_id=conversation_id
         )
 
         if uid and conversation_id and self.conversation_repository:
             import asyncio
-            asyncio.create_task(self.conversation_repository.save_message(uid, conversation_id, request, response))
+            async def _safe_save_message():
+                try:
+                    await self.conversation_repository.save_message(uid, conversation_id, request, response)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Background conversation persistence failed for conv {conversation_id}: {e}")
+            asyncio.create_task(_safe_save_message())
 
         return response
 
@@ -252,7 +263,8 @@ class AssistantService:
         active_hazards = []
         if res.hazards:
             for h in res.hazards:
-                active_hazards.append(f"{h.title} ({h.type.value})")
+                h_type_str = h.type.value if hasattr(h.type, "value") else str(h.type)
+                active_hazards.append(f"{h.title} ({h_type_str})")
 
         alternatives_summaries = [r.summary for r in res.routes if r.summary] if res.routes else []
 

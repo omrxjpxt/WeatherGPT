@@ -87,3 +87,37 @@ WeatherGPT requires data persistence for user profiles, saved commutes, historic
    - Full backward compatibility and offline/memory-mode support during local development via `MEMORY_MODE` fallbacks.
 - **Negative**:
    - Lacks real-time Firestore synchronization on the client; requires traditional pull-to-refresh or polling if real-time updates were needed.
+
+## ADR-003: Production Integration, Failure Isolation, and End-to-End Hardening
+
+### Status
+**Accepted** (Phase 19)
+
+### Context
+Moving WeatherGPT towards production requires validating end-to-end integration across Flutter and FastAPI while guaranteeing absolute resilience. Background database write delays or timeouts, authentication token tampering, cross-account switching, or upstream provider outages (Google Routes, Open-Meteo, Traffic API, Gemini LLM) must never crash the service, return hallucinated metrics, or compromise user security.
+
+### Decision
+1. **Persistence Failure Isolation**:
+   - Fire-and-forget database writes in `TripService` and `AssistantService` are wrapped in dedicated exception guards (`_safe_persist` and `_safe_save_message`).
+   - Database timeouts, connectivity breaks, or Firestore unavailability log errors as background warnings and are completely transparent to the user.
+   - A database failure will never fail, delay, or modify an in-flight trip evaluation or assistant conversation response.
+2. **Two-Tier Authentication Hardening**:
+   - `get_authenticated_user`: Strictly enforces Bearer token validation on protected endpoints (`/users/me/*`). Missing, malformed, or expired tokens immediately return HTTP 401 Unauthorized.
+   - `get_optional_current_user`: Enables public endpoints (`/trips/analyze`, `/assistant/chat`) to run anonymously for guest travelers while opportunistically attaching authenticated context if a valid token is present.
+   - **UID Spoofing Prevention**: On all profile/route mutations, client-provided payload UIDs are forcefully overwritten with the verified token UID (`profile.uid = uid`), preventing any authenticated user from mutating another user's data.
+3. **Reactive Session Lifecycle & State Cleanup**:
+   - Signing out on the Flutter client transitions `authStateProvider` to null.
+   - Riverpod providers watching auth state (`userProfileProvider`, `userSavedRoutesProvider`, `userTripHistoryProvider`, `userConversationsProvider`) reactively reset to null/empty without circular dependencies or stale cache bleeding.
+   - The Assistant UI resets conversational thread context upon sign-out and offers a dedicated "New Conversation" option.
+4. **Provider Degradation Matrix**:
+   - Upstream outages for routing, weather, traffic, or hazards degrade deterministically to typed status flags (`TripStatus.routing_unavailable`, `TripStatus.weather_unavailable`, `TrafficStatus.unavailable`).
+   - Safety risk scores and recommendations are never calculated or guessed from missing data; the UI and API explicitly communicate the degradation.
+
+### Consequences
+- **Positive**:
+  - High availability: Core trip safety analysis succeeds even during total database or external provider downtime.
+  - Complete security isolation between traveler accounts.
+  - Zero UI RenderFlex overflows verified across small and standard phone geometries.
+- **Negative**:
+  - Background database failures do not notify the user, requiring background system monitoring/observability to detect persistent database outages.
+

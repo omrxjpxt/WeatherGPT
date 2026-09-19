@@ -120,7 +120,14 @@ To ensure seamless local development and integration testing without requiring s
 ## Client Authentication & Persistence Boundary (Phase 18)
 The boundary between the Flutter client and the backend persistence layer follows strict principles:
 - **Client Role**: Flutter uses Firebase Auth solely to retrieve Firebase ID tokens, which are attached as `Authorization: Bearer <token>` on HTTP requests via `ApiClient`.
-- **FastAPI Role**: FastAPI decodes and verifies the ID token (`get_current_user`), enforces user scoping, and accesses Firestore (or Memory Mode).
+- **FastAPI Role**: FastAPI decodes and verifies the ID token (`get_authenticated_user` / `get_optional_current_user`), enforces user scoping, and accesses Firestore (or Memory Mode).
 - **Client Zero Direct Firestore Rule**: Flutter has NO direct dependency on `cloud_firestore` and performs no direct database operations.
 - **Decision Engine Isolation**: The Decision Engine remains 100% agnostic to user identity, authentication state, or stored routes. Saved routes act solely as bookmarks for subsequent public trip analysis requests.
+
+## Production Integration & Hardening (Phase 19)
+The system is hardened against failures across all integration boundaries:
+- **Persistence Failure Isolation**: In `TripService` and `AssistantService`, fire-and-forget database writes are wrapped in safe error isolation routines (`_safe_persist` and `_safe_save_message`). Any database timeout, network disconnect, or Firestore exception is logged without interrupting, altering, or delaying the user's trip evaluation or assistant chat response.
+- **Authentication Hardening**: `get_authenticated_user` strictly returns HTTP 401 on missing, expired, or malformed Bearer tokens. Client payload UIDs are forcibly overridden by verified token claims (`profile.uid = uid`) to eliminate UID spoofing and preserve cross-user isolation.
+- **Degradation Resilience Matrix**: Missing upstream providers (routing, weather, traffic, hazards, LLM) gracefully produce typed degraded responses (`TripStatus.routing_unavailable`, `TripStatus.weather_unavailable`, `TrafficStatus.unavailable`) without throwing 500 errors or returning hallucinated data.
+
 

@@ -216,10 +216,15 @@ Lightweight intent extraction endpoint without executing trip analysis.
 *Note: All JSON keys use `camelCase` to directly match the Flutter client models.*
 
 ### 8. Users
+Strictly protected with `get_authenticated_user` dependency. Any request missing an `Authorization` header, or with an invalid, malformed, or expired token receives `401 Unauthorized`.
+
+UID Spoofing Guard:
+All mutations override any client-supplied `uid` in the payload with the verified token `uid` (`profile.uid = uid`), preventing cross-user tampering.
+
 `GET /users/me/profile`
 `PUT /users/me/profile`
 **Model: `UserProfile`**
-- `uid`: str
+- `uid`: str (Server-enforced from auth token)
 - `email`: Optional[str]
 - `displayName`: Optional[str]
 - `homeAddress`: Optional[str]
@@ -243,7 +248,7 @@ Lightweight intent extraction endpoint without executing trip analysis.
 - `riskLevel`: Optional[str]
 - `recommendationHeadline`: Optional[str]
 - `createdAt`: datetime
-- `isSnapshot`: bool
+- `isSnapshot`: bool (Strictly `true` for historical records; never treated as live weather)
 
 `GET /users/me/trips/{analysisId}`
 Returns the full `TripResponse` snapshot.
@@ -254,3 +259,4 @@ Returns the full `TripResponse` snapshot.
 - `tripId`: str
 - `title`: str
 - `createdAt`: datetime
+

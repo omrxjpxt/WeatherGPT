@@ -50,8 +50,27 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     });
   }
 
+  void _resetConversation() {
+    setState(() {
+      _conversationId = null;
+      _messages.clear();
+      _messages.add(const _ChatMessage(
+        isUser: false,
+        text: 'Good morning! I can help you plan weather-safe travel across Delhi-NCR. '
+            'Where would you like to travel, and when?',
+        time: 'Just now',
+      ));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(authStateProvider, (previous, next) {
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
+        _resetConversation();
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.warmIvory,
       appBar: AppBar(
@@ -78,9 +97,31 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
           ],
         ),
         actions: [
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(CupertinoIcons.ellipsis_vertical),
-            onPressed: () {},
+            tooltip: 'Conversation Options',
+            onSelected: (val) {
+              if (val == 'new_chat') {
+                _resetConversation();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'new_chat',
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.plus_bubble, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'New Conversation',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
