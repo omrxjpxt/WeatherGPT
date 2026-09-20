@@ -440,6 +440,62 @@ class EvaluatedRoute {
       };
 }
 
+class AirQualitySnapshot {
+  final int aqi;
+  final double pm25;
+  final double? pm10;
+  final String category;
+  final String sourceName;
+  final bool isAvailable;
+  final bool isStale;
+  final DateTime? observationTime;
+  final String provenance;
+
+  const AirQualitySnapshot({
+    required this.aqi,
+    required this.pm25,
+    this.pm10,
+    required this.category,
+    required this.sourceName,
+    this.isAvailable = true,
+    this.isStale = false,
+    this.observationTime,
+    this.provenance = 'live_provider',
+  });
+
+  factory AirQualitySnapshot.fromJson(Map<String, dynamic> json) {
+    final rawPm25 = json['pm2_5'] ?? json['pm25'] ?? 0.0;
+    final rawPm10 = json['pm10'];
+    final rawTime = json['observationTime'] ?? json['observation_time'];
+
+    return AirQualitySnapshot(
+      aqi: (json['aqi'] as num?)?.toInt() ?? 0,
+      pm25: (rawPm25 as num).toDouble(),
+      pm10: rawPm10 != null ? (rawPm10 as num).toDouble() : null,
+      category: json['category'] as String? ?? 'Unknown',
+      sourceName: json['sourceName'] as String? ?? (json['source_name'] as String? ?? 'Air Quality'),
+      isAvailable: json['isAvailable'] as bool? ?? (json['is_available'] as bool? ?? true),
+      isStale: json['isStale'] as bool? ?? (json['is_stale'] as bool? ?? false),
+      observationTime: rawTime != null ? DateTime.tryParse(rawTime.toString()) : null,
+      provenance: json['provenance'] as String? ?? 'live_provider',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'aqi': aqi,
+      'pm2_5': pm25,
+      if (pm10 != null) 'pm10': pm10,
+      'category': category,
+      'sourceName': sourceName,
+      'isAvailable': isAvailable,
+      'isStale': isStale,
+      if (observationTime != null) 'observationTime': observationTime!.toIso8601String(),
+      'provenance': provenance,
+    };
+  }
+}
+
 class TripResponse {
   final String? analysisId;
   final TripStatus status;
@@ -454,6 +510,8 @@ class TripResponse {
   final double distanceKm;
   final TrafficSnapshot? traffic;
   final List<EvaluatedRoute> routes;
+  final AirQualitySnapshot? airQuality;
+  final Map<String, dynamic>? geocodingProvenance;
 
   TripResponse({
     this.analysisId,
@@ -469,6 +527,8 @@ class TripResponse {
     required this.distanceKm,
     this.traffic,
     this.routes = const [],
+    this.airQuality,
+    this.geocodingProvenance,
   });
 
   factory TripResponse.fromJson(Map<String, dynamic> json) {
@@ -490,6 +550,12 @@ class TripResponse {
       routes: json['routes'] != null
           ? (json['routes'] as List).map((e) => EvaluatedRoute.fromJson(e as Map<String, dynamic>)).toList()
           : const [],
+      airQuality: (json['airQuality'] != null || json['air_quality'] != null)
+          ? AirQualitySnapshot.fromJson((json['airQuality'] ?? json['air_quality']) as Map<String, dynamic>)
+          : null,
+      geocodingProvenance: (json['geocodingProvenance'] ?? json['geocoding_provenance']) != null
+          ? Map<String, dynamic>.from((json['geocodingProvenance'] ?? json['geocoding_provenance']) as Map)
+          : null,
     );
   }
 
@@ -508,6 +574,8 @@ class TripResponse {
       'distanceKm': distanceKm,
       'traffic': traffic?.toJson(),
       'routes': routes.map((e) => e.toJson()).toList(),
+      if (airQuality != null) 'airQuality': airQuality!.toJson(),
+      if (geocodingProvenance != null) 'geocodingProvenance': geocodingProvenance,
     };
   }
 }

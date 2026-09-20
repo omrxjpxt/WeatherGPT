@@ -139,7 +139,7 @@ class RouteEvaluator:
         traffic_delay_sec = traffic.delay_seconds if traffic else 0.0
 
         # Calculate exposure score from engine segment risks if available
-        exposure_score = float(engine_res.overall_risk.overall_score)
+        exposure_score = float(engine_res.exposure_score)
         bottleneck_score = max([r.risk_score for r in engine_res.segment_risks], default=engine_res.overall_risk.overall_score)
 
         # Check deadline feasibility

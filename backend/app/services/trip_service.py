@@ -6,10 +6,55 @@ from app.models.trip import TripRequest, TripResponse, ModeOption, Recommendatio
 from app.models.enums import TransportMode
 from app.decision_engine.engine import DecisionEngine
 from app.decision_engine.route_evaluator import RouteEvaluator
-from app.decision_engine.normalized_models import TripContext, NormalizedHazard
+from app.decision_engine.normalized_models import (
+    TripContext,
+    NormalizedHazard,
+    NormalizedRoute,
+    NormalizedRouteSegment,
+)
 from app.providers.weather.base import WeatherProvider
 from app.providers.routing.base import RoutingProvider
 from app.providers.routing.mock import MockRoutingProvider
+
+
+def _adapt_normalized_route(base_route: NormalizedRoute, target_mode: TransportMode) -> NormalizedRoute:
+    dist_km = base_route.total_distance_km
+    if target_mode == TransportMode.bike:
+        speed_kmh = 18.0
+    elif target_mode == TransportMode.walk:
+        speed_kmh = 5.0
+    else:  # car
+        speed_kmh = 40.0
+
+    target_total_secs = max(300, int((dist_km / speed_kmh) * 3600))
+    target_duration = timedelta(seconds=target_total_secs)
+
+    base_secs = max(1, int(base_route.total_duration.total_seconds()))
+    scale = target_total_secs / base_secs
+
+    new_segments = [
+        NormalizedRouteSegment(
+            start_lat=s.start_lat,
+            start_lng=s.start_lng,
+            end_lat=s.end_lat,
+            end_lng=s.end_lng,
+            distance_km=s.distance_km,
+            estimated_duration=timedelta(seconds=max(10, int(s.estimated_duration.total_seconds() * scale))),
+            traffic_congestion_factor=s.traffic_congestion_factor,
+        )
+        for s in base_route.segments
+    ]
+
+    return NormalizedRoute(
+        route_id=f"{base_route.route_id}_{target_mode.value}",
+        summary=f"{base_route.summary} ({target_mode.value.capitalize()})",
+        polyline=base_route.polyline,
+        segments=new_segments,
+        total_distance_km=dist_km,
+        total_duration=target_duration,
+        provider_name=base_route.provider_name,
+        provenance=base_route.provenance,
+    )
 from app.providers.alerts.base import AlertProvider
 from app.providers.traffic.base import TrafficProvider
 from app.providers.traffic.fallback import UnavailableTrafficProvider
@@ -152,16 +197,42 @@ class TripService:
             return alerts_gathered
 
         async def fetch_routing():
+            primary_routes = None
+            road_routes = None
+            metro_routes = None
+            routing_status = "ok"
+            routing_err = None
             try:
-                routes = await active_routing_provider.get_route(
-                    origin_lat, origin_lng, dest_lat, dest_lng, request.mode, departure_time=request.departure_time
-                )
-                routing_status = active_routing_provider.route_status.value
-                return routes, routing_status, None
+                if request.mode == TransportMode.metro:
+                    metro_routes = await self._metro_provider.get_route(
+                        origin_lat, origin_lng, dest_lat, dest_lng, TransportMode.metro, departure_time=request.departure_time
+                    )
+                    routing_status = self._metro_provider.route_status.value
+                    primary_routes = metro_routes
+                    try:
+                        road_routes = await self.routing_provider.get_route(
+                            origin_lat, origin_lng, dest_lat, dest_lng, TransportMode.car, departure_time=request.departure_time
+                        )
+                    except Exception:
+                        road_routes = None
+                else:
+                    road_routes = await self.routing_provider.get_route(
+                        origin_lat, origin_lng, dest_lat, dest_lng, request.mode, departure_time=request.departure_time
+                    )
+                    routing_status = self.routing_provider.route_status.value
+                    primary_routes = road_routes
+                    try:
+                        metro_routes = await self._metro_provider.get_route(
+                            origin_lat, origin_lng, dest_lat, dest_lng, TransportMode.metro, departure_time=request.departure_time
+                        )
+                    except Exception:
+                        metro_routes = None
+
+                return primary_routes, road_routes, metro_routes, routing_status, None
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).error(f"Routing failed: {e}")
-                return None, "unavailable", e
+                return None, None, None, "unavailable", e
 
         async def fetch_air_quality():
             if not self.air_quality_provider:
@@ -176,7 +247,7 @@ class TripService:
                 return None
 
         # Execute weather, secondary weather, alerts, routing, and air quality in parallel
-        weather_p, weather_s, raw_alerts, (routes, routing_status, routing_err), aqi_timeline = await asyncio.gather(
+        weather_p, weather_s, raw_alerts, (routes, road_routes, metro_routes, routing_status, routing_err), aqi_timeline = await asyncio.gather(
             fetch_primary_weather(),
             fetch_secondary_weather(),
             fetch_alerts(),
@@ -295,7 +366,93 @@ class TripService:
             arrival_deadline=request.arrival_deadline
         )
 
+        # 5. Populate multi-mode options in a single pass using Decision Engine
         mode_options = []
+        target_modes = [TransportMode.bike, TransportMode.car, TransportMode.metro]
+        primary_norm_route = next((r for r in routes if r.route_id == selected_route.route_id), routes[0])
+
+        for target_m in target_modes:
+            if target_m == request.mode:
+                mode_options.append(
+                    ModeOption(
+                        mode=request.mode,
+                        estimated_duration=selected_route.static_duration,
+                        risk=selected_route.risk,
+                        distance_km=selected_route.distance_km,
+                        recommendation=selected_route.evaluation.recommendation_headline,
+                        highlights=[f"{f.name}: {f.description}" for f in selected_route.risk.factors] if selected_route.risk else [],
+                    )
+                )
+            elif target_m == TransportMode.metro:
+                if metro_routes and len(metro_routes) > 0:
+                    try:
+                        metro_req = TripRequest(
+                            origin=request.origin,
+                            destination=request.destination,
+                            departure_time=request.departure_time,
+                            mode=TransportMode.metro,
+                        )
+                        eval_metro = self.route_evaluator.evaluate_route(
+                            route=metro_routes[0],
+                            request=metro_req,
+                            weather_timeline=comparison.primary_timeline,
+                            hazards=selected_route.hazards,
+                            alerts=alerts,
+                            traffic=None,
+                            agreement_status=comparison.agreement_status.value,
+                            air_quality_timeline=aqi_timeline,
+                        )
+                        mode_options.append(
+                            ModeOption(
+                                mode=TransportMode.metro,
+                                estimated_duration=eval_metro.static_duration,
+                                risk=eval_metro.risk,
+                                distance_km=eval_metro.distance_km,
+                                recommendation=eval_metro.evaluation.recommendation_headline,
+                                highlights=[f"{f.name}: {f.description}" for f in eval_metro.risk.factors] if eval_metro.risk else [],
+                            )
+                        )
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(f"Metro mode evaluation failed: {e}")
+            else:  # bike or car
+                base_road = primary_norm_route if request.mode != TransportMode.metro else (road_routes[0] if road_routes else None)
+                if base_road:
+                    try:
+                        adapted_road = _adapt_normalized_route(base_road, target_m)
+                        road_req = TripRequest(
+                            origin=request.origin,
+                            destination=request.destination,
+                            departure_time=request.departure_time,
+                            mode=target_m,
+                        )
+                        traffic_for_mode = selected_route.traffic if target_m == TransportMode.car else None
+                        eval_road = self.route_evaluator.evaluate_route(
+                            route=adapted_road,
+                            request=road_req,
+                            weather_timeline=comparison.primary_timeline,
+                            hazards=selected_route.hazards,
+                            alerts=alerts,
+                            traffic=traffic_for_mode,
+                            agreement_status=comparison.agreement_status.value,
+                            air_quality_timeline=aqi_timeline,
+                        )
+                        mode_options.append(
+                            ModeOption(
+                                mode=target_m,
+                                estimated_duration=eval_road.static_duration,
+                                risk=eval_road.risk,
+                                distance_km=eval_road.distance_km,
+                                recommendation=eval_road.evaluation.recommendation_headline,
+                                highlights=[f"{f.name}: {f.description}" for f in eval_road.risk.factors] if eval_road.risk else [],
+                            )
+                        )
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(f"Road mode evaluation failed for {target_m}: {e}")
+
+        mode_order = {TransportMode.bike: 0, TransportMode.car: 1, TransportMode.metro: 2}
+        mode_options.sort(key=lambda opt: mode_order.get(opt.mode, 99))
         sources = [
             DataSource(name=self.weather_provider.provider_name, type="Weather (Primary)", last_updated=datetime.now(timezone.utc)),
             DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),

@@ -64,6 +64,8 @@ CURATED_NCR_LOCATIONS = {
     # Gurgaon / Gurugram
     "cyber hub": (28.4942, 77.0860, "DLF Cyber Hub, DLF Phase 2, Gurugram", GeocodingResultType.EXACT_LANDMARK),
     "dlf cyber hub": (28.4942, 77.0860, "DLF Cyber Hub, DLF Phase 2, Gurugram", GeocodingResultType.EXACT_LANDMARK),
+    "gurgaon cyber hub": (28.4942, 77.0860, "DLF Cyber Hub, DLF Phase 2, Gurugram", GeocodingResultType.EXACT_LANDMARK),
+    "cyber hub gurgaon": (28.4942, 77.0860, "DLF Cyber Hub, DLF Phase 2, Gurugram", GeocodingResultType.EXACT_LANDMARK),
     "cyber city": (28.4942, 77.0880, "DLF Cyber City, Gurugram", GeocodingResultType.SECTOR_NEIGHBORHOOD),
     "iffco chowk": (28.4727, 77.0725, "IFFCO Chowk, Gurugram", GeocodingResultType.EXACT_LANDMARK),
     "ambience mall": (28.5042, 77.0968, "Ambience Mall, Gurugram", GeocodingResultType.EXACT_LANDMARK),

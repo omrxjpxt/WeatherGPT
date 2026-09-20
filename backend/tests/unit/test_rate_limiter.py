@@ -69,3 +69,43 @@ async def test_rate_limiter_authenticated_users_have_higher_tier():
     finally:
         settings.rate_limit_per_minute_anonymous = original_anon
         settings.rate_limit_per_minute_authenticated = original_auth
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_protects_scenarios_and_alerts():
+    """Verify that /api/v1/scenarios/evaluate and /api/v1/alerts/ are covered by rate limiting."""
+    original_limit = settings.rate_limit_per_minute_anonymous
+    try:
+        settings.rate_limit_per_minute_anonymous = 1
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Request 1 to alerts: allowed
+            r1 = await client.get("/api/v1/alerts/?lat=28.6&lng=77.3")
+            assert r1.status_code == 200
+
+            # Request 2 to alerts: blocked by rate limiter
+            r2 = await client.get("/api/v1/alerts/?lat=28.6&lng=77.3")
+            assert r2.status_code == 429
+            assert "Rate limit exceeded" in r2.json()["detail"]
+
+        rate_limiter.reset()
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            payload = {
+                "request": {
+                    "origin": "Noida Sector 62",
+                    "destination": "Gurgaon Cyber Hub",
+                    "departureTime": "2026-08-27T08:00:00Z",
+                    "mode": "bike",
+                },
+                "departure_times": ["2026-08-27T08:00:00Z"],
+            }
+            # Request 1 to scenarios: allowed
+            r3 = await client.post("/api/v1/scenarios/evaluate", json=payload)
+            assert r3.status_code == 200
+
+            # Request 2 to scenarios: blocked
+            r4 = await client.post("/api/v1/scenarios/evaluate", json=payload)
+            assert r4.status_code == 429
+    finally:
+        settings.rate_limit_per_minute_anonymous = original_limit

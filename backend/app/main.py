@@ -32,6 +32,8 @@ RATE_LIMITED_PREFIXES = (
     "/api/v1/trips/analyze",
     "/api/v1/assistant/",
     "/api/v1/weather/",
+    "/api/v1/scenarios/evaluate",
+    "/api/v1/alerts/",
 )
 
 

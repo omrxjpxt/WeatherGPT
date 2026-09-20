@@ -120,6 +120,35 @@ class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: Spacing.stackSm),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildQuickOffsetButton(
+                              label: '+15m',
+                              onTap: () {
+                                final target = DateTime.now().add(const Duration(minutes: 15));
+                                _selectClosestScenario(scenarios, target);
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            _buildQuickOffsetButton(
+                              label: '+30m',
+                              onTap: () {
+                                final target = DateTime.now().add(const Duration(minutes: 30));
+                                _selectClosestScenario(scenarios, target);
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            _buildQuickOffsetButton(
+                              label: '+1h',
+                              onTap: () {
+                                final target = DateTime.now().add(const Duration(hours: 1));
+                                _selectClosestScenario(scenarios, target);
+                              },
+                            ),
+                          ],
+                        ),
                       ],
                     ],
                   ),
@@ -259,6 +288,44 @@ class _WhatIfScreenState extends ConsumerState<WhatIfScreen> {
     RiskLevel.high => AppColors.riskHigh,
     RiskLevel.severe => AppColors.riskSevere,
   };
+
+  void _selectClosestScenario(List<ScenarioResult> scenarios, DateTime target) {
+    if (scenarios.isEmpty) return;
+    int bestIdx = 0;
+    int bestDiff = 999999999;
+    for (int i = 0; i < scenarios.length; i++) {
+      final diff = (scenarios[i].departureTime.difference(target)).inSeconds.abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = i;
+      }
+    }
+    setState(() {
+      _sliderValue = bestIdx.toDouble();
+    });
+  }
+
+  Widget _buildQuickOffsetButton({required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(Radii.badge),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(Radii.badge),
+          border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.labelCaps.copyWith(
+            color: AppColors.primaryText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Visual timeline chart showing risk scores across departure times

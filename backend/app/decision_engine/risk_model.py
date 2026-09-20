@@ -142,7 +142,7 @@ def calculate_segment_risk(
             description=f"Rainfall of {weather.precipitation_mm} mm expected in this hour.",
             score=precip_score,
             level=_score_to_level(precip_score),
-            weight=0.4
+            weight=0.35
         ))
         
     vis_score = 0
@@ -219,16 +219,19 @@ def calculate_segment_risk(
             contribution_score=hazard_contribution
         ))
 
-    # Combine: precipitation (0.40) + visibility (0.20) + hazards (0.30) + aqi (0.15)
-    base_environmental_risk = (
-        (precip_score * 0.4)
-        + ((60 if weather.is_poor_visibility else 0) * 0.2)
-        + (segment_hazards_score * 0.3)
-        + (aqi_score * 0.15)
+    # Combine: precipitation (0.35) + visibility (0.20) + hazards (0.30) + aqi (0.15) = 1.00
+    base_weather_risk = (
+        (precip_score * 0.35)
+        + ((60 if weather.is_poor_visibility else 0) * 0.20)
+        + (segment_hazards_score * 0.30)
     )
     
-    # Apply exposure multipliers
-    final_score = int(base_environmental_risk * mode_multiplier * temporal_multiplier)
+    # Apply exposure multipliers:
+    # base_weather_risk is scaled by mode_multiplier.
+    # aqi_score already incorporates mode exposure in calculate_aqi_risk_score.
+    # Both are then scaled by temporal_multiplier.
+    effective_segment_risk = (base_weather_risk * mode_multiplier) + (aqi_score * 0.15)
+    final_score = int(effective_segment_risk * temporal_multiplier)
     final_score = min(100, max(0, final_score))
     
     level = _score_to_level(final_score)

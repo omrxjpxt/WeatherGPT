@@ -180,6 +180,14 @@ class _TripAnalysisBodyState extends ConsumerState<_TripAnalysisBody> {
                 displayTraffic,
                 active?.staticDuration ?? widget.trip.estimatedDuration,
               ),
+              const SizedBox(height: Spacing.stackMd),
+
+              // Air Quality intelligence card
+              _buildAirQualityCard(
+                context,
+                widget.trip.airQuality,
+                widget.trip.request.mode,
+              ),
               const SizedBox(height: Spacing.stackLg),
 
               // Route Alternatives
@@ -604,6 +612,251 @@ class _TripAnalysisBodyState extends ConsumerState<_TripAnalysisBody> {
     CongestionLevel.severe => 'Severe Congestion',
     CongestionLevel.unknown => 'Unknown Conditions',
   };
+
+  Widget _buildAirQualityCard(
+    BuildContext context,
+    AirQualitySnapshot? aqi,
+    TransportMode mode,
+  ) {
+    final isAvailable = aqi != null && aqi.isAvailable && aqi.aqi >= 0;
+
+    if (!isAvailable) {
+      return WeatherCard(
+        key: const Key('air_quality_card_unavailable'),
+        backgroundColor: AppColors.surfaceContainerLow,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(Radii.base),
+              ),
+              child: const Icon(
+                CupertinoIcons.wind,
+                color: AppColors.onSurfaceVariant,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Air Quality Unavailable',
+                    style: AppTypography.labelMd.copyWith(
+                      color: AppColors.primaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Real-time atmospheric CAMS data unavailable. Baseline environmental model applied.',
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final catLower = aqi.category.toLowerCase();
+    final Color aqiColor;
+    final Color aqiBgColor;
+    if (catLower.contains('good')) {
+      aqiColor = AppColors.riskLow;
+      aqiBgColor = AppColors.riskLowBg;
+    } else if (catLower.contains('moderate') || catLower.contains('satisfactory')) {
+      aqiColor = AppColors.sunriseAmber;
+      aqiBgColor = AppColors.riskModerateBg;
+    } else if (catLower.contains('poor') || catLower.contains('unhealthy')) {
+      aqiColor = AppColors.riskHigh;
+      aqiBgColor = AppColors.riskHighBg;
+    } else {
+      aqiColor = AppColors.riskSevere;
+      aqiBgColor = AppColors.riskSevereBg;
+    }
+
+    final String modeGuidance;
+    switch (mode) {
+      case TransportMode.car:
+        modeGuidance = 'Cabin air-filtration active. Exposure reduced inside enclosed vehicle.';
+        break;
+      case TransportMode.metro:
+        modeGuidance = 'Enclosed transit. High cabin protection with minimal atmospheric exposure.';
+        break;
+      case TransportMode.bike:
+      case TransportMode.walk:
+        if (aqi.aqi >= 200 || catLower.contains('poor') || catLower.contains('severe')) {
+          modeGuidance = 'High direct exposure. N95 mask strongly recommended for outdoor travel.';
+        } else if (aqi.aqi >= 100) {
+          modeGuidance = 'Moderate outdoor exposure. Consider protective mask if sensitive to pollution.';
+        } else {
+          modeGuidance = 'Direct outdoor exposure. Air quality within acceptable limits.';
+        }
+        break;
+    }
+
+    return WeatherCard(
+      key: const Key('air_quality_card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: aqiColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(Radii.base),
+                ),
+                child: Icon(
+                  CupertinoIcons.wind,
+                  color: aqiColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AIR QUALITY INTELLIGENCE',
+                      style: AppTypography.labelCaps.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      'AQI ${aqi.aqi.round()} • ${aqi.category}',
+                      style: AppTypography.headlineMd.copyWith(
+                        color: AppColors.primaryText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (aqi.isStale)
+                Container(
+                  key: const Key('air_quality_stale_indicator'),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(Radii.full),
+                    border: Border.all(color: AppColors.outlineVariant),
+                  ),
+                  child: Text(
+                    'STALE DATA',
+                    style: AppTypography.labelCaps.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: aqiBgColor,
+                    borderRadius: BorderRadius.circular(Radii.full),
+                    border: Border.all(color: aqiColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    aqi.category.toUpperCase(),
+                    style: AppTypography.labelCaps.copyWith(
+                      color: aqiColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: Spacing.stackMd),
+          const Divider(),
+          const SizedBox(height: Spacing.stackSm),
+
+          // Metrics row: AQI, PM2.5, PM10
+          Row(
+            children: [
+              Expanded(
+                child: _TrafficMetric(
+                  label: 'AQI INDEX',
+                  value: '${aqi.aqi.round()}',
+                  color: aqiColor,
+                ),
+              ),
+              Expanded(
+                child: _TrafficMetric(
+                  label: 'PM2.5',
+                  value: '${aqi.pm25.toStringAsFixed(1)} µg/m³',
+                  color: AppColors.primaryText,
+                ),
+              ),
+              if (aqi.pm10 != null)
+                Expanded(
+                  child: _TrafficMetric(
+                    label: 'PM10',
+                    value: '${aqi.pm10!.toStringAsFixed(1)} µg/m³',
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: Spacing.stackSm),
+
+          // Mode-specific exposure guidance
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(Radii.base),
+              border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  mode == TransportMode.car || mode == TransportMode.metro
+                      ? CupertinoIcons.shield_fill
+                      : CupertinoIcons.exclamationmark_triangle_fill,
+                  size: 16,
+                  color: mode == TransportMode.car || mode == TransportMode.metro
+                      ? AppColors.riskLow
+                      : (aqi.aqi >= 100 ? AppColors.sunriseAmber : AppColors.riskLow),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    modeGuidance,
+                    style: AppTypography.bodySm.copyWith(
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.stackSm),
+          Text(
+            'Source: ${aqi.sourceName} • ${aqi.provenance}',
+            style: AppTypography.labelCaps.copyWith(
+              color: AppColors.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildSegmentRow(RouteSegment segment) {
     final color = _colorForRisk(segment.riskLevel);

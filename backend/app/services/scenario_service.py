@@ -23,7 +23,7 @@ class ScenarioService:
                 departure_time=time,
                 risk=response.risk,
                 estimated_duration=response.estimated_duration,
-                recommendation=response.recommendation.body,
+                recommendation=response.recommendation.body if response.recommendation else "Route guidance unavailable.",
                 changed_factors=[] # Simplified for MVP
             ))
             

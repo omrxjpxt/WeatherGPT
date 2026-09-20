@@ -260,5 +260,6 @@ class DecisionEngine:
             active_override_alert=override_alert,
             hazards=trip_hazards,
             total_duration=ctx.route.total_duration,
-            total_distance_km=ctx.route.total_distance_km
+            total_distance_km=ctx.route.total_distance_km,
+            exposure_score=round(exposure_score, 2)
         )

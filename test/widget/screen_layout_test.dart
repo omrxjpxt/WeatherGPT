@@ -464,7 +464,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // Scroll down to view Route Alternatives
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -350));
+      await tester.scrollUntilVisible(find.text('ROUTE ALTERNATIVES'), 100);
       await tester.pumpAndSettle();
 
       expect(find.text('ROUTE ALTERNATIVES'), findsOneWidget);

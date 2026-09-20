@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from typing import List
 
 from app.decision_engine.normalized_models import NormalizedHazard
-from app.repositories.mock_hazard_repository import MockHazardRepository
+from app.repositories.interfaces.hazard_repository import HazardRepository
 from app.api.dependencies import get_hazard_repository
 
 router = APIRouter()
@@ -13,7 +13,7 @@ async def get_hazards(
     min_lng: float = 68.0,
     max_lat: float = 37.0,
     max_lng: float = 97.0,
-    hazard_repo: MockHazardRepository = Depends(get_hazard_repository),
+    hazard_repo: HazardRepository = Depends(get_hazard_repository),
 ):
     """
     Returns hazards within a bounding box. 

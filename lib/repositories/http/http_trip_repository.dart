@@ -35,35 +35,20 @@ class HttpTripRepository implements TripRepository {
     String destination,
     DateTime departureTime,
   ) async {
-    // For MVP: Fetch 3 trips from the backend
-    final modesToCompare = [TransportMode.bike, TransportMode.car, TransportMode.metro];
-    
-    // We run these in parallel
-    final futures = modesToCompare.map((mode) async {
-      try {
-        final request = TripRequest(
-          origin: origin,
-          destination: destination,
-          departureTime: departureTime,
-          mode: mode,
-        );
-        final tripResponse = await analyzeTrip(request);
-        
-        return ModeOption(
-          mode: mode,
-          estimatedDuration: tripResponse.estimatedDuration,
-          risk: tripResponse.risk,
-          distanceKm: tripResponse.distanceKm,
-          recommendation: tripResponse.recommendation?.headline,
-          highlights: tripResponse.risk?.factors.map((f) => '${f.name}: ${f.description}').toList() ?? [],
-        );
-      } catch (e) {
-        debugPrint('Failed to get comparison for mode $mode: $e');
-        return null;
+    try {
+      final request = TripRequest(
+        origin: origin,
+        destination: destination,
+        departureTime: departureTime,
+        mode: TransportMode.car,
+      );
+      final tripResponse = await analyzeTrip(request);
+      if (tripResponse.modeOptions.isNotEmpty) {
+        return tripResponse.modeOptions;
       }
-    });
-
-    final results = await Future.wait(futures);
-    return results.whereType<ModeOption>().toList();
+    } catch (e) {
+      debugPrint('Single-pass mode comparison failed: $e');
+    }
+    return [];
   }
 }

@@ -207,12 +207,30 @@ class TripRequestNotifier extends Notifier<TripRequest> {
     return TripRequest(
       origin: 'Noida Sector 62',
       destination: 'Gurgaon Cyber Hub',
-      departureTime: DateTime(2026, 8, 27, 8, 0),
+      departureTime: DateTime.now().add(const Duration(minutes: 15)),
       mode: TransportMode.bike,
     );
   }
 
   void update(TripRequest request) => state = request;
+
+  void adjustDeparture(Duration offset) {
+    state = TripRequest(
+      origin: state.origin,
+      destination: state.destination,
+      departureTime: state.departureTime.add(offset),
+      mode: state.mode,
+    );
+  }
+
+  void setDepartureFromNow(Duration offset) {
+    state = TripRequest(
+      origin: state.origin,
+      destination: state.destination,
+      departureTime: DateTime.now().add(offset),
+      mode: state.mode,
+    );
+  }
 }
 
 final activeTripRequestProvider =
@@ -228,7 +246,7 @@ final tripResponseProvider = FutureProvider<TripResponse>((ref) async {
 
 class ScenarioTimeNotifier extends Notifier<DateTime> {
   @override
-  DateTime build() => DateTime(2026, 8, 27, 8, 0);
+  DateTime build() => DateTime.now().add(const Duration(minutes: 15));
 
   void update(DateTime time) => state = time;
 }
@@ -339,7 +357,7 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
         final req = TripRequest(
           origin: res.intent.origin!,
           destination: res.intent.destination!,
-          departureTime: res.intent.departureTime ?? DateTime(2026, 8, 28, 8, 0),
+          departureTime: res.intent.departureTime ?? DateTime.now().add(const Duration(minutes: 15)),
           mode: res.intent.mode ?? TransportMode.bike,
         );
         state = state.copyWith(extractedTrip: req);
@@ -353,7 +371,7 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
     final fallbackReq = TripRequest(
       origin: 'Noida Sector 62',
       destination: 'College (DTU)',
-      departureTime: DateTime(2026, 8, 28, 8, 0),
+      departureTime: DateTime.now().add(const Duration(minutes: 15)),
       mode: TransportMode.bike,
     );
     state = state.copyWith(extractedTrip: fallbackReq);

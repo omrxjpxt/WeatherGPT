@@ -27,3 +27,4 @@ class EngineDecisionResult(BaseModel):
     hazards: List[TripHazard] = []
     total_duration: timedelta
     total_distance_km: float
+    exposure_score: float = 0.0

@@ -82,7 +82,20 @@ elif settings.air_quality_provider == "mock":
 else:
     air_quality_provider = OpenMeteoAirQualityProvider()
 
-traffic_provider = MockTrafficProvider()
+# Traffic Provider setup
+if settings.is_production:
+    if settings.google_maps_api_key and settings.google_traffic_aware:
+        from app.providers.traffic.google import GoogleRoutesTrafficProvider
+        from app.providers.traffic.fallback import FallbackTrafficProvider, UnavailableTrafficProvider
+        traffic_provider = FallbackTrafficProvider(
+            primary=GoogleRoutesTrafficProvider(),
+            fallback=UnavailableTrafficProvider()
+        )
+    else:
+        from app.providers.traffic.fallback import UnavailableTrafficProvider
+        traffic_provider = UnavailableTrafficProvider()
+else:
+    traffic_provider = MockTrafficProvider()
 
 # Alert Provider setup
 if settings.alert_provider == "sachet":
