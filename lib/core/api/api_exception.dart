@@ -27,7 +27,10 @@ class ApiException implements Exception {
 
   @override
   String toString() {
-    return 'ApiException(type: $type, statusCode: $statusCode, retryAfter: $retryAfter, message: $message)';
+    if (retryAfter != null) {
+      return 'ApiException(type: $type, statusCode: $statusCode, retryAfter: $retryAfter, message: $message)';
+    }
+    return 'ApiException(type: $type, statusCode: $statusCode, message: $message)';
   }
 }
 

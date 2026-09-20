@@ -14,5 +14,19 @@ void main() {
         'ApiException(type: ApiErrorType.networkError, statusCode: null, message: No connection)',
       );
     });
+
+    test('ApiException toString formatting with retryAfter', () {
+      final exception = ApiException(
+        type: ApiErrorType.rateLimited,
+        statusCode: 429,
+        retryAfter: 30,
+        message: 'Rate limit exceeded',
+      );
+      
+      expect(
+        exception.toString(),
+        'ApiException(type: ApiErrorType.rateLimited, statusCode: 429, retryAfter: 30, message: Rate limit exceeded)',
+      );
+    });
   });
 }
