@@ -2,6 +2,35 @@
 
 The WeatherGPT Decision Engine is a pure, deterministic, side-effect-free module. Identical normalized inputs always produce identical risk scores, recommendations, and alert overrides.
 
+## Base Environmental Weights & Mathematical Formulations
+
+The segment environmental risk model uses normalized weights summing to 1.00:
+- **Precipitation ($P_{\text{eff}}$)**: Weight **0.35**
+- **Visibility ($V$)**: Weight **0.20**
+- **Hazard Contribution ($H$)**: Weight **0.30**
+- **Air Quality Index ($A$)**: Weight **0.15**
+- **Total Base Weights**: $0.35 + 0.20 + 0.30 + 0.15 = 1.00$
+
+### Mathematical Formulations:
+1. **Precipitation Probability Scaling**:
+   $$P_{\text{eff}} = \text{precipitation\_mm} \times \max(0.20, \text{probability} / 100)$$
+   If precipitation probability is $< 20\%$, the precipitation intensity score is bounded to $\le 10$ to prevent drizzle false alarms.
+2. **Air Quality Index (AQI) Piecewise Linear Interpolation**:
+   Calculated from $PM_{2.5}$ concentration using US EPA 7-breakpoint linear interpolation on a 0–500 scale.
+3. **AQI Mode Exposure**:
+   Applied to AQI risk contribution according to cabin/vehicle protection:
+   - Bike / Walk: $1.0\times$
+   - Car: $0.15\times$
+   - Metro: $0.10\times$
+4. **Temporal Exposure Multiplier**:
+   $$M_{\text{temp}} = \min(2.0, \max(0.5, \text{segment\_duration\_minutes} / 10.0))$$
+   Scales risk contribution between $0.5\times$ and $2.0\times$ based on dwell time in the segment.
+5. **Overall Route Risk Aggregation**:
+   $$\text{Route Risk} = 0.60 \times \text{Bottleneck} + 0.40 \times \text{Exposure}$$
+   *Guardrail:* If Bottleneck risk score is $\ge 75$ (Severe), the overall route risk score is clamped to $\ge 75$.
+6. **Scenario Simulation Single-Pass Architecture**:
+   To prevent $13\times$ N+1 external API call explosions during multi-departure scenario simulations, `TripService.resolve_corridor_context` fetches geocoding, corridor weather forecasts, routing polyline, active alerts, and hazards once in a single corridor pass. The 13 departure scenarios are then evaluated entirely in-memory against the resolved corridor timeline.
+
 ## Hazard vs. Exposure
 Risk calculation explicitly separates:
 - **Hazard Severity**: Environmental conditions (e.g., precipitation rate, poor visibility).
@@ -10,7 +39,7 @@ Risk calculation explicitly separates:
 - **User Exposure (Mode)**: The degree to which the user's transport mode protects them. 
 
 > [!NOTE]
-> **Engineering Assumption:** Mode multipliers (Bike = 1.0, Car = 0.4, Metro = 0.15, Walk = 1.1) are MVP heuristics, not scientifically calibrated constants. Future iterations will explicitly model last-mile walking, station exposure, and transit disruption.
+> **Engineering Assumption:** Mode multipliers (Bike = 1.0, Car = 0.4, Metro = 0.15, Walk = 1.1) are MVP heuristics, not scientifically calibrated constants.
 
 ## Overall Risk Aggregation
 The overall trip risk is an aggregation of two components:
@@ -19,10 +48,10 @@ The overall trip risk is an aggregation of two components:
 
 > [!NOTE]
 > **Configurable Parameters:** 
-> - `BOTTLENECK_WEIGHT` (MVP Default: 0.6)
-> - `EXPOSURE_WEIGHT` (MVP Default: 0.4)
+> - `BOTTLENECK_WEIGHT` (Default: 0.6)
+> - `EXPOSURE_WEIGHT` (Default: 0.4)
 >
-> **Engineering Assumption:** A severe short bottleneck shouldn't be averaged away. A hard guardrail ensures that if the bottleneck is "Severe", the overall score remains "Severe" regardless of the exposure weight.
+> **Engineering Assumption:** A severe short bottleneck shouldn't be averaged away. A hard guardrail ensures that if the bottleneck is "Severe" ($\ge 75$), the overall score remains "Severe" regardless of the exposure weight.
 
 ## Spatial Matching (Hazards & Alerts)
 

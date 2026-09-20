@@ -1,7 +1,7 @@
 import httpx
 import structlog
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from app.providers.weather.base import WeatherProvider
 from app.decision_engine.normalized_models import NormalizedWeatherPoint
@@ -50,10 +50,11 @@ class OpenMeteoWeatherProvider(WeatherProvider):
     Non-commercial, free-tier API. Data provided under CC-BY 4.0.
     """
     
-    def __init__(self, timeout_seconds: float = 5.0, max_retries: int = 2):
+    def __init__(self, timeout_seconds: float = 5.0, max_retries: int = 2, client: Optional[httpx.AsyncClient] = None):
         self.timeout = timeout_seconds
         self.max_retries = max_retries
         self.base_url = "https://api.open-meteo.com/v1/forecast"
+        self._client = client
 
     @property
     def provider_name(self) -> str:
@@ -104,8 +105,16 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             "forecast_hours": min(72, hours + 24) # Fetch enough hours to cover start_time
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            data = await self._fetch_with_retry(client, params)
+        active_client = self._client
+        if active_client is None or active_client.is_closed:
+            from app.core.http import HttpClientManager
+            active_client = HttpClientManager.get_client()
+
+        if active_client and not active_client.is_closed:
+            data = await self._fetch_with_retry(active_client, params)
+        else:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                data = await self._fetch_with_retry(client, params)
 
         if "hourly" not in data or "time" not in data["hourly"]:
             raise OpenMeteoProviderError("Malformed response: missing 'hourly' data")

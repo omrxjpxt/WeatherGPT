@@ -286,21 +286,29 @@ final modeComparisonProvider = FutureProvider<List<ModeOption>>((ref) async {
 
 // ── Weather State ──
 
+final userLocationProvider = Provider<String>((ref) {
+  final trip = ref.watch(activeTripRequestProvider);
+  return trip.origin;
+});
+
 final currentWeatherProvider = FutureProvider<WeatherPoint>((ref) async {
+  final location = ref.watch(userLocationProvider);
   final repo = ref.read(weatherRepositoryProvider);
-  return repo.getCurrentWeather('Noida Sector 62');
+  return repo.getCurrentWeather(location);
 });
 
 final forecastProvider = FutureProvider<List<WeatherPoint>>((ref) async {
+  final location = ref.watch(userLocationProvider);
   final repo = ref.read(weatherRepositoryProvider);
-  return repo.getForecast('Noida Sector 62');
+  return repo.getForecast(location);
 });
 
 // ── Alerts State ──
 
 final activeAlertsProvider = FutureProvider<List<OfficialAlert>>((ref) async {
+  final location = ref.watch(userLocationProvider);
   final repo = ref.read(alertRepositoryProvider);
-  return repo.getActiveAlerts();
+  return repo.getActiveAlerts(location: location);
 });
 
 // ── Historical State ──

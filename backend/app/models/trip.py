@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
 from typing import List, Optional
-from pydantic import Field
+from pydantic import Field, field_validator
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from app.models.base import WeatherBaseModel
@@ -37,6 +37,22 @@ class TripRequest(WeatherBaseModel):
     departure_time: datetime
     mode: TransportMode
     arrival_deadline: Optional[datetime] = None
+
+    @field_validator("departure_time", mode="after")
+    @classmethod
+    def ensure_departure_time_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
+
+    @field_validator("arrival_deadline", mode="after")
+    @classmethod
+    def ensure_arrival_deadline_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
 
 class TripResponse(WeatherBaseModel):
     analysis_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

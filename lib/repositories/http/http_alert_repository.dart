@@ -9,10 +9,13 @@ class HttpAlertRepository implements AlertRepository {
 
   @override
   Future<List<OfficialAlert>> getActiveAlerts({String? location}) async {
-    // Backend takes lat/lng
+    final Map<String, String> queryParams = {};
+    if (location != null && location.trim().isNotEmpty) {
+      queryParams['location'] = location.trim();
+    }
     final response = await _apiClient.get(
       '/alerts/',
-      queryParams: {'lat': '28.6270', 'lng': '77.3650'},
+      queryParams: queryParams.isNotEmpty ? queryParams : null,
     );
     final List<dynamic> resultsJson = response;
     return resultsJson.map((json) => OfficialAlert.fromJson(json)).toList();

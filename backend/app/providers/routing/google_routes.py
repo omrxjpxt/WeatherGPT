@@ -26,8 +26,9 @@ class GoogleRoutesProvider(RoutingProvider):
     
     FIELD_MASK = "routes.distanceMeters,routes.duration,routes.staticDuration,routes.description,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.duration,routes.legs.steps.startLocation,routes.legs.steps.endLocation,routes.legs.steps.polyline.encodedPolyline"
 
-    def __init__(self):
+    def __init__(self, client: Optional[httpx.AsyncClient] = None):
         self._last_status = RouteStatus.live
+        self._client = client
         
     @property
     def provider_name(self) -> str:
@@ -70,9 +71,17 @@ class GoogleRoutesProvider(RoutingProvider):
             "X-Goog-FieldMask": self.FIELD_MASK
         }
         
+        active_client = self._client
+        if active_client is None or active_client.is_closed:
+            from app.core.http import HttpClientManager
+            active_client = HttpClientManager.get_client()
+
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(self.API_URL, json=request_body, headers=headers)
+            if active_client and not active_client.is_closed:
+                response = await active_client.post(self.API_URL, json=request_body, headers=headers)
+            else:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(self.API_URL, json=request_body, headers=headers)
                 
                 if response.status_code == 429:
                     raise ProviderRateLimitError("Google Routes API rate limit exceeded.")

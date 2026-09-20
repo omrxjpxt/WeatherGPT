@@ -13,13 +13,19 @@ from app.core.logging import setup_logging
 from app.core.rate_limiter import rate_limiter
 from app.api.routes import health, trips, scenarios, weather, alerts, assistant, hazards, users
 
+from app.core.http import HttpClientManager
+
 logger = structlog.get_logger("weathergpt.api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    yield
+    await HttpClientManager.initialize()
+    try:
+        yield
+    finally:
+        await HttpClientManager.close()
 
 
 app = FastAPI(

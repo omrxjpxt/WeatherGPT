@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.decision_engine.normalized_models import NormalizedRoute, NormalizedWeatherPoint, NormalizedRouteSegment
 from app.models.traffic import TrafficSnapshot
 
@@ -43,5 +43,11 @@ def _get_closest_weather(target_time: datetime, timeline: List[NormalizedWeather
     if not timeline:
         raise ValueError("Weather timeline cannot be empty")
         
+    target_utc = target_time if target_time.tzinfo is not None else target_time.replace(tzinfo=timezone.utc)
+    
+    def _time_diff(wp: NormalizedWeatherPoint) -> float:
+        wp_time = wp.time if wp.time.tzinfo is not None else wp.time.replace(tzinfo=timezone.utc)
+        return abs((wp_time - target_utc).total_seconds())
+
     # Find the weather point with the minimum absolute time difference
-    return min(timeline, key=lambda wp: abs((wp.time - target_time).total_seconds()))
+    return min(timeline, key=_time_diff)

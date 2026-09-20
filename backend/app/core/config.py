@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_per_minute_anonymous: int = 30
     rate_limit_per_minute_authenticated: int = 120
+    rate_limit_max_keys: int = 10000
+    trusted_proxies: list[str] = ["127.0.0.1", "::1", "testclient"]
 
     # Source Comparison Thresholds
     temperature_diff_threshold_c: float = 5.0

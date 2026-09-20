@@ -11,7 +11,8 @@ def calculate_confidence(forecast_time: datetime, agreement_status: AgreementSta
     source availability, and source agreement.
     """
     now = datetime.now(timezone.utc)
-    delta_hours = (forecast_time - now).total_seconds() / 3600.0
+    fc_time = forecast_time if forecast_time.tzinfo is not None else forecast_time.replace(tzinfo=timezone.utc)
+    delta_hours = (fc_time - now).total_seconds() / 3600.0
     
     # Base confidence off of agreement
     if agreement_status == AgreementStatus.significant_disagreement:

@@ -12,6 +12,8 @@ import '../../core/providers.dart';
 import '../../models/models.dart';
 import '../profile/auth_dialog.dart';
 
+import '../../core/api/api_exception.dart';
+
 /// Trip Analysis Refined — Route map with risk segments and trip details
 class TripAnalysisScreen extends ConsumerWidget {
   const TripAnalysisScreen({super.key});
@@ -27,7 +29,70 @@ class TripAnalysisScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.sunriseAmber),
         ),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => _buildErrorView(context, ref, e),
+      ),
+    );
+  }
+
+  Widget _buildErrorView(BuildContext context, WidgetRef ref, Object error) {
+    final isRateLimited = error is ApiException && error.type == ApiErrorType.rateLimited;
+    final message = error is ApiException
+        ? error.message
+        : 'Unable to analyze trip. Please check your connection and try again.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(Spacing.xl),
+        child: Container(
+          padding: const EdgeInsets.all(Spacing.lg),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(Radii.card),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.softShadow,
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isRateLimited ? CupertinoIcons.hourglass : CupertinoIcons.exclamationmark_triangle,
+                size: 44,
+                color: isRateLimited ? AppColors.sunriseAmber : AppColors.error,
+              ),
+              const SizedBox(height: Spacing.md),
+              Text(
+                isRateLimited ? 'Rate Limit Reached' : 'Analysis Unavailable',
+                style: AppTypography.headlineMd,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Spacing.sm),
+              Text(
+                message,
+                style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Spacing.lg),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(tripResponseProvider),
+                icon: const Icon(CupertinoIcons.refresh, size: 16),
+                label: const Text('Retry Analysis'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.md),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(Radii.full),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

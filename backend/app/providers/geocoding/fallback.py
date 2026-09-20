@@ -33,14 +33,23 @@ class FallbackGeocodingProvider(GeocodingProvider):
         self,
         providers: Optional[list[GeocodingProvider]] = None,
         min_confidence: float = 0.50,
+        max_cache_entries: int = 1000,
     ):
         self.providers = providers or [CuratedGazetteerGeocodingProvider()]
         self.min_confidence = min_confidence
+        self.max_cache_entries = max_cache_entries
         self._cache: dict[str, GeocodingResult] = {}
 
     @property
     def provider_name(self) -> str:
         return "fallback"
+
+    def _store_in_cache(self, key: str, result: GeocodingResult) -> None:
+        """Stores geocoding result with FIFO eviction if cache exceeds bounds."""
+        if len(self._cache) >= self.max_cache_entries:
+            oldest_key = next(iter(self._cache))
+            self._cache.pop(oldest_key, None)
+        self._cache[key] = result
 
     async def geocode(self, query: str) -> Optional[GeocodingResult]:
         if not query or not query.strip():
@@ -76,7 +85,7 @@ class FallbackGeocodingProvider(GeocodingProvider):
                         continue
 
                     # Valid resolution
-                    self._cache[cache_key] = result
+                    self._store_in_cache(cache_key, result)
                     return result
             except Exception as e:
                 logger.warning(

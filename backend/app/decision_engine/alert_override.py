@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from app.decision_engine.normalized_models import NormalizedAlert, NormalizedRoute
 from app.models.enums import AlertSeverity
 from app.decision_engine.spatial import point_in_polygon
@@ -25,8 +25,13 @@ def check_alert_override(
             continue
             
         # 2. Temporal match (validity overlaps travel window)
-        starts_before_end = alert.issued_at <= travel_end
-        expires_after_start = alert.expires_at is None or alert.expires_at >= travel_start
+        t_start = travel_start if travel_start.tzinfo is not None else travel_start.replace(tzinfo=timezone.utc)
+        t_end = travel_end if travel_end.tzinfo is not None else travel_end.replace(tzinfo=timezone.utc)
+        a_issued = alert.issued_at if alert.issued_at.tzinfo is not None else alert.issued_at.replace(tzinfo=timezone.utc)
+        a_expires = alert.expires_at if (alert.expires_at is None or alert.expires_at.tzinfo is not None) else alert.expires_at.replace(tzinfo=timezone.utc)
+
+        starts_before_end = a_issued <= t_end
+        expires_after_start = a_expires is None or a_expires >= t_start
         if not (starts_before_end and expires_after_start):
             continue
             

@@ -24,9 +24,21 @@ All endpoints accept and return camelCase JSON automatically handled by the back
 
 ## Endpoints
 
-### 1. Health
+### 1. Health & Readiness
 `GET /health`
-Returns service status, version, and environment.
+Returns lightweight service status, version, and environment.
+
+`GET /ready` (or `GET /health/ready`)
+Production readiness probe verifying core dependencies and configuration:
+- **Configuration**: Settings loaded and validated
+- **HTTP Client Pool**: Shared `httpx.AsyncClient` operational
+- **Weather Provider**: Connectivity to primary weather provider
+- **Geocoding Provider**: Reverse/forward geocoder resolution readiness
+- **Database**: Firestore (or memory mode in development) accessibility
+
+**Responses:**
+- `HTTP 200 OK`: `{"status": "ready", "checks": {"config": "healthy", "http_client": "healthy", "weather_provider": "healthy", "geocoding_provider": "healthy", "database": "healthy"}}`
+- `HTTP 503 Service Unavailable`: In production, if any critical dependency is unreachable: `{"status": "not_ready", "checks": {...}}`.
 
 ### 2. Trips
 `POST /trips/analyze`
@@ -140,12 +152,24 @@ Tracks origin and destination geocoding provenance and confidence:
   "destination": "Google Geocoding API [live_api]"
 }
 ```
-Low-confidence geocoding queries ($< 0.50$) or ambiguous queries raise `GeocodingResolutionError` resulting in a clean `HTTP 400 Bad Request`.
+#### Mode Options Intelligence (`TripResponse.modeOptions`)
+When multi-mode evaluation is performed, `TripResponse.modeOptions` contains candidate transport modes evaluated in a single consolidated pass:
+- `mode`: `bike` | `car` | `metro` | `walk`
+- `isRecommended`: bool (Deterministic backend recommendation)
+- `riskScore`: int (0–100)
+- `riskLevel`: `low` | `moderate` | `high` | `severe`
+- `durationMinutes`: int
+- `headline`: str
+- `reason`: str
+- `trafficDelayMinutes`: int
+- `aqi`: Optional[int]
+- `aqiCategory`: Optional[str]
 
 ### 3. Scenarios
 `POST /scenarios/evaluate`
 **Request:** `EvaluateScenariosRequest` (request: TripRequest, departure_times: List[datetime])
 **Response:** `List[ScenarioResult]`
+Uses the single-pass `CorridorContext` resolution to evaluate departure scenarios in-memory without repeating expensive external routing/weather provider network requests.
 
 ### 4. Weather
 `GET /weather/current`
@@ -153,6 +177,12 @@ Low-confidence geocoding queries ($< 0.50$) or ambiguous queries raise `Geocodin
 
 ### 5. Alerts
 `GET /alerts/`
+Retrieves active government and meteorological emergency alerts.
+**Query Parameters:**
+- `location`: Optional[str] (e.g. `?location=Gurgaon+Cyber+Hub`, dynamically geocoded on the fly)
+- `lat`, `lng`: Optional[float] (Explicit geographic coordinates)
+- `radiusKm`: Optional[float] (Default: 50.0 km)
+If both `location` and `lat`/`lng` are omitted, falls back to the default NCR reference center coordinates.
 
 **Model: `NormalizedAlert`**
 - `id`: str
@@ -317,8 +347,11 @@ Every incoming HTTP request accepts an optional `X-Request-Id` header. If absent
 Expensive endpoints (`/trips/analyze`, `/assistant/*`, `/weather/*`) are protected by an in-memory sliding-window rate limiter:
 - **Anonymous Travelers:** 30 requests / minute (keyed by client IP)
 - **Authenticated Travelers:** 120 requests / minute (keyed by verified token prefix)
+- **Memory Bounding & Pruning:** Key store is automatically pruned of expired timestamps and capped at `rate_limit_max_keys` (default 10,000) to prevent memory exhaustion attacks.
+- **Anti-Spoofing & Trusted Proxies:** `X-Forwarded-For` is only inspected when the direct client connection originates from an IP explicitly in `trusted_proxies` (e.g. cloud reverse proxy/load balancer). Untrusted clients cannot bypass limits by spoofing headers.
 - **Breach Response:** `HTTP 429 Too Many Requests`
   ```json
   {"detail": "Rate limit exceeded. Please try again later."}
   ```
-  Accompanied by the standard `Retry-After: {seconds}` header. CORS preflight (`OPTIONS`) requests are never rate-limited.
+  Accompanied by standard `Retry-After: {seconds}` header. CORS preflight (`OPTIONS`) requests are never rate-limited.
+- **Client Handling:** The Flutter client (`ApiClient`) maps HTTP 429 to `ApiErrorType.rateLimited` with parsed `retryAfter` duration, displaying a dedicated rate-limit card with an active retry action.

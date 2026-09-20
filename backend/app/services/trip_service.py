@@ -65,6 +65,29 @@ from app.providers.geocoding.base import GeocodingProvider, GeocodingResolutionE
 from app.providers.geocoding.fallback import FallbackGeocodingProvider
 from app.providers.geocoding.gazetteer import CuratedGazetteerGeocodingProvider
 from app.providers.air_quality.base import AirQualityProvider, AirQualitySnapshot
+from dataclasses import dataclass, field
+from typing import Dict, Any
+
+@dataclass
+class CorridorContext:
+    origin_lat: float
+    origin_lng: float
+    dest_lat: float
+    dest_lng: float
+    geocoding_provenance: dict
+    active_routing_provider: Any
+    routing_provider_name: str
+    routes: Optional[List[NormalizedRoute]]
+    road_routes: Optional[List[NormalizedRoute]]
+    metro_routes: Optional[List[NormalizedRoute]]
+    routing_status: str
+    routing_err: Optional[Exception]
+    comparison: Any
+    alerts: List['NormalizedAlert']
+    aqi_timeline: Optional[List[Any]]
+    route_hazards: Dict[str, List[NormalizedHazard]] = field(default_factory=dict)
+    telemetry: Dict[str, float] = field(default_factory=dict)
+
 
 class TripService:
     def __init__(
@@ -119,15 +142,40 @@ class TripService:
                 alert.is_override_eligible = False
         return alerts
 
-    async def analyze_trip(self, request: TripRequest, uid: Optional[str] = None) -> TripResponse:
+    async def _get_route_hazards(self, route: Optional[NormalizedRoute]) -> List[NormalizedHazard]:
+        if not self.hazard_repository or not route or not route.segments:
+            return []
+        try:
+            min_lat = min(min(seg.start_lat, seg.end_lat) for seg in route.segments)
+            max_lat = max(max(seg.start_lat, seg.end_lat) for seg in route.segments)
+            min_lng = min(min(seg.start_lng, seg.end_lng) for seg in route.segments)
+            max_lng = max(max(seg.start_lng, seg.end_lng) for seg in route.segments)
+
+            return await self.hazard_repository.get_hazards_in_region(
+                min_lat - 0.05, min_lng - 0.05,
+                max_lat + 0.05, max_lng + 0.05
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Hazard repository failed for route: {e}")
+            return []
+
+    async def resolve_corridor_context(self, request: TripRequest, forecast_hours: int = 12) -> CorridorContext:
         import asyncio
+        import time
+        import logging
         from app.decision_engine.source_comparison import compare_weather_sources
 
+        logger = logging.getLogger(__name__)
+        telemetry: Dict[str, float] = {}
+
         # 1. Resolve Origin and Destination via Confidence-Aware Geocoder
+        t_geo = time.monotonic()
         origin_res, dest_res = await asyncio.gather(
             self.geocoding_provider.geocode(request.origin),
             self.geocoding_provider.geocode(request.destination),
         )
+        telemetry["geocoding_ms"] = round((time.monotonic() - t_geo) * 1000, 2)
 
         if not origin_res:
             raise GeocodingResolutionError(
@@ -161,24 +209,31 @@ class TripService:
 
         # 2. Concurrently fetch independent upstream provider data
         async def fetch_primary_weather():
+            t0 = time.monotonic()
             try:
-                return await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
+                res = await self.weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, forecast_hours)
+                telemetry["primary_weather_ms"] = round((time.monotonic() - t0) * 1000, 2)
+                return res
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Primary weather failed: {e}")
+                logger.error(f"Primary weather failed: {e}")
+                telemetry["primary_weather_ms"] = round((time.monotonic() - t0) * 1000, 2)
                 return None
 
         async def fetch_secondary_weather():
             if not self.secondary_weather_provider:
                 return None
+            t0 = time.monotonic()
             try:
-                return await self.secondary_weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, 12)
+                res = await self.secondary_weather_provider.get_forecast(origin_lat, origin_lng, request.departure_time, forecast_hours)
+                telemetry["secondary_weather_ms"] = round((time.monotonic() - t0) * 1000, 2)
+                return res
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Secondary weather failed: {e}")
+                logger.error(f"Secondary weather failed: {e}")
+                telemetry["secondary_weather_ms"] = round((time.monotonic() - t0) * 1000, 2)
                 return None
 
         async def fetch_alerts():
+            t0 = time.monotonic()
             alerts_gathered = []
 
             async def _fetch_single(p):
@@ -194,14 +249,15 @@ class TripService:
             )
             alerts_gathered.extend(res[0])
             alerts_gathered.extend(res[1])
+            telemetry["alerts_ms"] = round((time.monotonic() - t0) * 1000, 2)
             return alerts_gathered
 
         async def fetch_routing():
+            t0 = time.monotonic()
             primary_routes = None
             road_routes = None
             metro_routes = None
             routing_status = "ok"
-            routing_err = None
             try:
                 if request.mode == TransportMode.metro:
                     metro_routes = await self._metro_provider.get_route(
@@ -228,22 +284,26 @@ class TripService:
                     except Exception:
                         metro_routes = None
 
+                telemetry["routing_ms"] = round((time.monotonic() - t0) * 1000, 2)
                 return primary_routes, road_routes, metro_routes, routing_status, None
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Routing failed: {e}")
+                logger.error(f"Routing failed: {e}")
+                telemetry["routing_ms"] = round((time.monotonic() - t0) * 1000, 2)
                 return None, None, None, "unavailable", e
 
         async def fetch_air_quality():
             if not self.air_quality_provider:
                 return None
+            t0 = time.monotonic()
             try:
-                return await self.air_quality_provider.get_air_quality(
-                    origin_lat, origin_lng, request.departure_time, hours=6
+                res = await self.air_quality_provider.get_air_quality(
+                    origin_lat, origin_lng, request.departure_time, hours=max(6, min(48, forecast_hours))
                 )
+                telemetry["aqi_ms"] = round((time.monotonic() - t0) * 1000, 2)
+                return res
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Air quality fetch failed: {e}")
+                logger.warning(f"Air quality fetch failed: {e}")
+                telemetry["aqi_ms"] = round((time.monotonic() - t0) * 1000, 2)
                 return None
 
         # Execute weather, secondary weather, alerts, routing, and air quality in parallel
@@ -256,9 +316,49 @@ class TripService:
         )
 
         comparison = compare_weather_sources(weather_p, weather_s)
+        alerts = self._evaluate_alert_policy(raw_alerts)
+
+        # Pre-fetch hazards for candidate routes
+        route_hazards: Dict[str, List[NormalizedHazard]] = {}
+        if routes:
+            t_haz = time.monotonic()
+            for r in routes:
+                route_hazards[r.route_id] = await self._get_route_hazards(r)
+            telemetry["hazards_ms"] = round((time.monotonic() - t_haz) * 1000, 2)
+
+        mode_val = request.mode.value if hasattr(request.mode, "value") else str(request.mode)
+        logger.info(
+            "Corridor context telemetry (ms)",
+            extra={"telemetry": telemetry, "origin": request.origin, "mode": mode_val}
+        )
+
+        return CorridorContext(
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
+            dest_lat=dest_lat,
+            dest_lng=dest_lng,
+            geocoding_provenance=geocoding_provenance,
+            active_routing_provider=active_routing_provider,
+            routing_provider_name=routing_provider_name,
+            routes=routes,
+            road_routes=road_routes,
+            metro_routes=metro_routes,
+            routing_status=routing_status,
+            routing_err=routing_err,
+            comparison=comparison,
+            alerts=alerts,
+            aqi_timeline=aqi_timeline,
+            route_hazards=route_hazards,
+            telemetry=telemetry,
+        )
+
+    async def analyze_trip(self, request: TripRequest, uid: Optional[str] = None) -> TripResponse:
+        import asyncio
+
+        ctx = await self.resolve_corridor_context(request, forecast_hours=12)
 
         # 1.1 If both weather sources are unavailable, fallback gracefully.
-        if not comparison.primary_timeline:
+        if not ctx.comparison.primary_timeline:
             from app.models.enums import TripStatus
             return TripResponse(
                 analysis_id=str(uuid.uuid4()),
@@ -274,12 +374,9 @@ class TripService:
                 distance_km=0.0
             )
 
-        # Fetch and evaluate alerts against WeatherGPT override policy
-        alerts = self._evaluate_alert_policy(raw_alerts)
-
         analysis_id = str(uuid.uuid4())
 
-        if routes is None or routing_err is not None:
+        if ctx.routes is None or ctx.routing_err is not None:
             from app.models.enums import TripStatus
             return TripResponse(
                 analysis_id=analysis_id,
@@ -292,7 +389,7 @@ class TripService:
                 hazards=[],
                 sources=[
                     DataSource(name=self.weather_provider.provider_name, type="Weather", last_updated=datetime.now(timezone.utc)),
-                    DataSource(name=routing_provider_name, type="Routing [unavailable]", last_updated=datetime.now(timezone.utc)),
+                    DataSource(name=ctx.routing_provider_name, type="Routing [unavailable]", last_updated=datetime.now(timezone.utc)),
                 ],
                 estimated_duration=timedelta(0),
                 distance_km=0.0,
@@ -327,37 +424,24 @@ class TripService:
                     )
 
             # B. Corridor hazards query
-            route_hazards = []
-            if self.hazard_repository and route.segments:
-                try:
-                    min_lat = min(min(seg.start_lat, seg.end_lat) for seg in route.segments)
-                    max_lat = max(max(seg.start_lat, seg.end_lat) for seg in route.segments)
-                    min_lng = min(min(seg.start_lng, seg.end_lng) for seg in route.segments)
-                    max_lng = max(max(seg.start_lng, seg.end_lng) for seg in route.segments)
-
-                    route_hazards = await self.hazard_repository.get_hazards_in_region(
-                        min_lat - 0.05, min_lng - 0.05,
-                        max_lat + 0.05, max_lng + 0.05
-                    )
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).error(f"Hazard repository failed for route {route.route_id}: {e}")
-                    route_hazards = []
+            route_hazards = ctx.route_hazards.get(route.route_id)
+            if route_hazards is None:
+                route_hazards = await self._get_route_hazards(route)
 
             # C. Independent evaluation through decision engine
             return self.route_evaluator.evaluate_route(
                 route=route,
                 request=request,
-                weather_timeline=comparison.primary_timeline,
+                weather_timeline=ctx.comparison.primary_timeline,
                 hazards=route_hazards,
-                alerts=alerts,
+                alerts=ctx.alerts,
                 traffic=traffic,
-                agreement_status=comparison.agreement_status.value,
-                air_quality_timeline=aqi_timeline,
+                agreement_status=ctx.comparison.agreement_status.value,
+                air_quality_timeline=ctx.aqi_timeline,
             )
 
         # Preserve deterministic route ordering with asyncio.gather
-        evaluated_routes = list(await asyncio.gather(*[evaluate_single_candidate(r) for r in routes]))
+        evaluated_routes = list(await asyncio.gather(*[evaluate_single_candidate(r) for r in ctx.routes]))
 
         # 4. Deterministic selection & ranking
         selected_route, ranked_routes = self.route_evaluator.select_and_rank_routes(
@@ -369,7 +453,10 @@ class TripService:
         # 5. Populate multi-mode options in a single pass using Decision Engine
         mode_options = []
         target_modes = [TransportMode.bike, TransportMode.car, TransportMode.metro]
-        primary_norm_route = next((r for r in routes if r.route_id == selected_route.route_id), routes[0])
+        primary_norm_route = next((r for r in ctx.routes if r.route_id == selected_route.route_id), ctx.routes[0])
+        primary_road_hazards = ctx.route_hazards.get(primary_norm_route.route_id)
+        if primary_road_hazards is None:
+            primary_road_hazards = await self._get_route_hazards(primary_norm_route)
 
         for target_m in target_modes:
             if target_m == request.mode:
@@ -384,8 +471,9 @@ class TripService:
                     )
                 )
             elif target_m == TransportMode.metro:
-                if metro_routes and len(metro_routes) > 0:
+                if ctx.metro_routes and len(ctx.metro_routes) > 0:
                     try:
+                        metro_hazards = await self._get_route_hazards(ctx.metro_routes[0])
                         metro_req = TripRequest(
                             origin=request.origin,
                             destination=request.destination,
@@ -393,14 +481,14 @@ class TripService:
                             mode=TransportMode.metro,
                         )
                         eval_metro = self.route_evaluator.evaluate_route(
-                            route=metro_routes[0],
+                            route=ctx.metro_routes[0],
                             request=metro_req,
-                            weather_timeline=comparison.primary_timeline,
-                            hazards=selected_route.hazards,
-                            alerts=alerts,
+                            weather_timeline=ctx.comparison.primary_timeline,
+                            hazards=metro_hazards,
+                            alerts=ctx.alerts,
                             traffic=None,
-                            agreement_status=comparison.agreement_status.value,
-                            air_quality_timeline=aqi_timeline,
+                            agreement_status=ctx.comparison.agreement_status.value,
+                            air_quality_timeline=ctx.aqi_timeline,
                         )
                         mode_options.append(
                             ModeOption(
@@ -416,10 +504,11 @@ class TripService:
                         import logging
                         logging.getLogger(__name__).warning(f"Metro mode evaluation failed: {e}")
             else:  # bike or car
-                base_road = primary_norm_route if request.mode != TransportMode.metro else (road_routes[0] if road_routes else None)
+                base_road = primary_norm_route if request.mode != TransportMode.metro else (ctx.road_routes[0] if ctx.road_routes else None)
                 if base_road:
                     try:
                         adapted_road = _adapt_normalized_route(base_road, target_m)
+                        road_hazards = primary_road_hazards if base_road == primary_norm_route else await self._get_route_hazards(base_road)
                         road_req = TripRequest(
                             origin=request.origin,
                             destination=request.destination,
@@ -430,12 +519,12 @@ class TripService:
                         eval_road = self.route_evaluator.evaluate_route(
                             route=adapted_road,
                             request=road_req,
-                            weather_timeline=comparison.primary_timeline,
-                            hazards=selected_route.hazards,
-                            alerts=alerts,
+                            weather_timeline=ctx.comparison.primary_timeline,
+                            hazards=road_hazards,
+                            alerts=ctx.alerts,
                             traffic=traffic_for_mode,
-                            agreement_status=comparison.agreement_status.value,
-                            air_quality_timeline=aqi_timeline,
+                            agreement_status=ctx.comparison.agreement_status.value,
+                            air_quality_timeline=ctx.aqi_timeline,
                         )
                         mode_options.append(
                             ModeOption(
@@ -455,7 +544,7 @@ class TripService:
         mode_options.sort(key=lambda opt: mode_order.get(opt.mode, 99))
         sources = [
             DataSource(name=self.weather_provider.provider_name, type="Weather (Primary)", last_updated=datetime.now(timezone.utc)),
-            DataSource(name=routing_provider_name, type=f"Routing [{routing_status}]", last_updated=datetime.now(timezone.utc)),
+            DataSource(name=ctx.routing_provider_name, type=f"Routing [{ctx.routing_status}]", last_updated=datetime.now(timezone.utc)),
             DataSource(name=self.alert_provider.provider_name, type=f"Alerts [{self.alert_provider.provider_class.value}]", last_updated=datetime.now(timezone.utc)),
         ]
 
@@ -466,9 +555,9 @@ class TripService:
 
         # Build Air Quality Snapshot & Provenance
         air_quality_snapshot = None
-        if aqi_timeline:
+        if ctx.aqi_timeline:
             dep_utc = request.departure_time if request.departure_time.tzinfo else request.departure_time.replace(tzinfo=timezone.utc)
-            rep_pt = min(aqi_timeline, key=lambda pt: abs((pt.time - dep_utc).total_seconds()))
+            rep_pt = min(ctx.aqi_timeline, key=lambda pt: abs((pt.time - dep_utc).total_seconds()))
             air_quality_snapshot = AirQualitySnapshot(
                 aqi=rep_pt.aqi,
                 pm2_5=rep_pt.pm2_5,
@@ -495,7 +584,7 @@ class TripService:
                 provenance="degraded",
             )
 
-        if self.secondary_weather_provider and comparison.secondary_timeline:
+        if self.secondary_weather_provider and ctx.comparison.secondary_timeline:
             sources.append(DataSource(name=self.secondary_weather_provider.provider_name, type="Weather (Secondary)", last_updated=datetime.now(timezone.utc)))
 
         if self.secondary_alert_provider:
@@ -527,7 +616,7 @@ class TripService:
             traffic=selected_route.traffic,
             routes=ranked_routes,
             air_quality=air_quality_snapshot,
-            geocoding_provenance=geocoding_provenance,
+            geocoding_provenance=ctx.geocoding_provenance,
         )
 
         if uid and self.trip_repository:
@@ -538,6 +627,8 @@ class TripService:
                 except Exception as e:
                     import logging
                     logging.getLogger(__name__).error(f"Background trip persistence failed for uid {uid}: {e}")
+            import asyncio
             asyncio.create_task(_safe_persist())
 
         return response
+

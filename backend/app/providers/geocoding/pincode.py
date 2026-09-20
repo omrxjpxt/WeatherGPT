@@ -35,10 +35,11 @@ class NcrPincodeGeocodingProvider(GeocodingProvider):
     ===========================================================================
     """
 
-    def __init__(self, dataset_path: Optional[Path] = None, enable_live_fallback: bool = True):
+    def __init__(self, dataset_path: Optional[Path] = None, enable_live_fallback: bool = True, http_client: Optional[httpx.AsyncClient] = None):
         self.dataset_path = dataset_path or DEFAULT_PINCODE_DATASET
         self.enable_live_fallback = enable_live_fallback
         self.pincodes: Dict[str, Dict[str, Any]] = {}
+        self._client = http_client
         self._load_dataset()
 
     @property
@@ -63,7 +64,7 @@ class NcrPincodeGeocodingProvider(GeocodingProvider):
             return None
 
         # Detect 6-digit PIN code in query
-        match = PINCODE_REGEX.search(query.strip())
+        match = PINCODE_REGEX.search(query)
         if not match:
             return None
 
@@ -97,36 +98,45 @@ class NcrPincodeGeocodingProvider(GeocodingProvider):
         # 2. Out-of-NCR fallback: Query api.postalpincode.in if enabled
         if self.enable_live_fallback:
             try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.get(f"https://api.postalpincode.in/pincode/{pin}")
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        if isinstance(data, list) and data and data[0].get("Status") == "Success":
-                            post_offices = data[0].get("PostOffice", [])
-                            if post_offices:
-                                po = post_offices[0]
-                                po_name = po.get("Name", "")
-                                district = po.get("District", "")
-                                state = po.get("State", "")
-                                display_name = f"{po_name}, {district}, {state} ({pin})"
+                active_client = self._client
+                if active_client is None or active_client.is_closed:
+                    from app.core.http import HttpClientManager
+                    active_client = HttpClientManager.get_client()
 
-                                # Note: postalpincode.in does not always return lat/lng directly.
-                                # If coordinates are missing, return None to let downstream geocoders resolve.
-                                lat = po.get("Latitude")
-                                lng = po.get("Longitude")
-                                if lat and lng:
-                                    return GeocodingResult(
-                                        query=query,
-                                        lat=float(lat),
-                                        lng=float(lng),
-                                        display_name=display_name,
-                                        provider="India Post API (postalpincode.in)",
-                                        result_type=GeocodingResultType.POSTAL_CODE,
-                                        confidence=0.85,
-                                        is_exact=False,
-                                        timestamp=datetime.now(timezone.utc),
-                                        provenance=GeocodingProvenance.LIVE_PROVIDER,
-                                    )
+                if active_client and not active_client.is_closed:
+                    resp = await active_client.get(f"https://api.postalpincode.in/pincode/{pin}")
+                else:
+                    async with httpx.AsyncClient(timeout=3.0) as client:
+                        resp = await client.get(f"https://api.postalpincode.in/pincode/{pin}")
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list) and data and data[0].get("Status") == "Success":
+                        post_offices = data[0].get("PostOffice", [])
+                        if post_offices:
+                            po = post_offices[0]
+                            po_name = po.get("Name", "")
+                            district = po.get("District", "")
+                            state = po.get("State", "")
+                            display_name = f"{po_name}, {district}, {state} ({pin})"
+
+                            # Note: postalpincode.in does not always return lat/lng directly.
+                            # If coordinates are missing, return None to let downstream geocoders resolve.
+                            lat = po.get("Latitude")
+                            lng = po.get("Longitude")
+                            if lat and lng:
+                                return GeocodingResult(
+                                    query=query,
+                                    lat=float(lat),
+                                    lng=float(lng),
+                                    display_name=display_name,
+                                    provider="India Post API (postalpincode.in)",
+                                    result_type=GeocodingResultType.POSTAL_CODE,
+                                    confidence=0.85,
+                                    is_exact=False,
+                                    timestamp=datetime.now(timezone.utc),
+                                    provenance=GeocodingProvenance.LIVE_PROVIDER,
+                                )
             except Exception as e:
                 logger.debug(f"Live postal PIN code fallback failed for {pin}: {e}")
 

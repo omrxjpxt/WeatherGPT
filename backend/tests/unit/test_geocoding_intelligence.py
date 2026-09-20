@@ -305,3 +305,33 @@ async def test_trip_service_geocoding_provenance_and_ambiguity_rejection():
     )
     with pytest.raises(GeocodingResolutionError):
         await strict_service.analyze_trip(ambiguous_req)
+
+
+@pytest.mark.asyncio
+async def test_geocoding_fallback_cache_bounding_and_eviction():
+    from app.providers.geocoding.gazetteer import CuratedGazetteerGeocodingProvider
+
+    # Initialize fallback provider with max_cache_entries = 3
+    provider = FallbackGeocodingProvider(
+        providers=[CuratedGazetteerGeocodingProvider()],
+        max_cache_entries=3,
+    )
+
+    # 1. Geocode 3 distinct queries
+    res1 = await provider.geocode("Connaught Place")
+    res2 = await provider.geocode("Noida Sector 62")
+    res3 = await provider.geocode("Cyber Hub")
+
+    assert len(provider._cache) == 3
+    assert "connaught place" in provider._cache
+    assert "noida sector 62" in provider._cache
+    assert "cyber hub" in provider._cache
+
+    # 2. Geocode 4th query -> should evict the oldest entry ("connaught place")
+    res4 = await provider.geocode("Saket")
+    assert len(provider._cache) == 3
+    assert "connaught place" not in provider._cache
+    assert "saket" in provider._cache
+    assert "noida sector 62" in provider._cache
+    assert "cyber hub" in provider._cache
+

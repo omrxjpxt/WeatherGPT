@@ -97,6 +97,8 @@ class ApiClient {
       ApiErrorType errorType = ApiErrorType.serverError;
       String message = 'Server error occurred.';
 
+      int? retryAfter;
+
       if (response.statusCode == 401) {
         errorType = ApiErrorType.unauthorized;
         message = 'Authentication required or session expired.';
@@ -106,6 +108,15 @@ class ApiClient {
       } else if (response.statusCode == 422) {
         errorType = ApiErrorType.validationError;
         message = 'Invalid request parameters.';
+      } else if (response.statusCode == 429) {
+        errorType = ApiErrorType.rateLimited;
+        final retryHeader = response.headers['retry-after'];
+        if (retryHeader != null) {
+          retryAfter = int.tryParse(retryHeader);
+        }
+        message = retryAfter != null
+            ? 'Rate limit exceeded. Please try again in $retryAfter seconds.'
+            : 'Rate limit exceeded. Please wait a moment before trying again.';
       } else if (response.statusCode == 503) {
         errorType = ApiErrorType.routingUnavailable;
         message = 'Service temporarily unavailable.';
@@ -124,10 +135,15 @@ class ApiClient {
         }
       } catch (_) {}
 
+      if (response.statusCode == 429 && retryAfter != null && !message.contains('$retryAfter')) {
+        message = '$message Please try again in $retryAfter seconds.';
+      }
+
       throw ApiException(
         type: errorType,
         message: message,
         statusCode: response.statusCode,
+        retryAfter: retryAfter,
       );
     }
   }
