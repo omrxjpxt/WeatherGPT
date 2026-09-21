@@ -34,7 +34,11 @@ async def test_readiness_probe_endpoints():
             assert checks["config"] == "ok"
             assert "weather_provider" in checks
             assert "geocoding_provider" in checks
+            assert "routing_provider" in checks
+            assert "alert_provider" in checks
+            assert "http_pool" in checks
             assert "database" in checks
+
 
 
 @pytest.mark.asyncio

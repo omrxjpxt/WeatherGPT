@@ -83,15 +83,15 @@ class GoogleRoutesProvider(RoutingProvider):
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(self.API_URL, json=request_body, headers=headers)
                 
-                if response.status_code == 429:
-                    raise ProviderRateLimitError("Google Routes API rate limit exceeded.")
-                elif response.status_code >= 500:
-                    # In a real system, we might retry here. For now, we raise a transient error.
-                    raise RoutingError(f"Transient Google API error: {response.status_code}")
-                elif response.status_code >= 400:
-                    raise RoutingError(f"Google API client error {response.status_code}: {response.text}")
-                    
-                data = response.json()
+            if response.status_code == 429:
+                raise ProviderRateLimitError("Google Routes API rate limit exceeded.")
+            elif response.status_code >= 500:
+                # In a real system, we might retry here. For now, we raise a transient error.
+                raise RoutingError(f"Transient Google API error: {response.status_code}")
+            elif response.status_code >= 400:
+                raise RoutingError(f"Google API client error {response.status_code}: {response.text}")
+                
+            data = response.json()
                 
         except httpx.TimeoutException:
             raise ProviderTimeoutError("Request to Google Routes API timed out.")

@@ -18,7 +18,13 @@ async def health_check():
 @router.get("/ready", response_model=dict)
 @router.get("/health/ready", response_model=dict)
 async def readiness_probe(response: Response):
-    from app.api.dependencies import weather_provider, geocoding_provider, firestore_client
+    from app.api.dependencies import (
+        weather_provider,
+        geocoding_provider,
+        routing_provider,
+        alert_provider,
+        firestore_client,
+    )
     from app.core.http import HttpClientManager
 
     checks = {}
@@ -49,13 +55,34 @@ async def readiness_probe(response: Response):
         if settings.is_production:
             is_ready = False
 
-    # 4. Shared HTTP Connection Pool
+    # 4. Routing Provider Check
+    if routing_provider:
+        checks["routing_provider"] = {
+            "status": "ok",
+            "name": routing_provider.provider_name,
+        }
+    else:
+        checks["routing_provider"] = {"status": "unconfigured"}
+        if settings.is_production:
+            is_ready = False
+
+    # 5. Alert Provider Check
+    if alert_provider:
+        status_desc = getattr(alert_provider, "provider_status", "ok")
+        checks["alert_provider"] = {
+            "status": status_desc,
+            "name": alert_provider.provider_name,
+        }
+    else:
+        checks["alert_provider"] = {"status": "unconfigured"}
+
+    # 6. Shared HTTP Connection Pool
     client = HttpClientManager.get_client()
     checks["http_pool"] = {
         "status": "ok" if (client is not None and not client.is_closed) else "idle"
     }
 
-    # 5. Database Status
+    # 7. Database Status
     if firestore_client is not None:
         checks["database"] = {"status": "connected", "type": "firestore"}
     elif settings.is_production:

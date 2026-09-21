@@ -92,6 +92,8 @@ class NdmaSachetAlertProvider(AlertProvider):
         self._etag: Optional[str] = None
         self._cached_alerts: List[NormalizedAlert] = []
         self._last_fetch_time: Optional[datetime] = None
+        self._last_status: str = "ok"
+        self._last_status_code: Optional[int] = None
 
     @property
     def provider_name(self) -> str:
@@ -100,6 +102,10 @@ class NdmaSachetAlertProvider(AlertProvider):
     @property
     def provider_class(self) -> str:
         return AlertSourceClass.authoritative
+
+    @property
+    def provider_status(self) -> str:
+        return self._last_status
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._external_client is not None:
@@ -239,21 +245,41 @@ class NdmaSachetAlertProvider(AlertProvider):
         try:
             response = await client.get(self.feed_url, headers=headers)
         except httpx.TimeoutException:
+            self._last_status = "timeout"
+            self._last_status_code = None
             logger.warning("Timeout connecting to NDMA SACHET feed. Returning cached/empty alerts.")
             return self._cached_alerts or []
         except Exception as e:
+            self._last_status = "error"
+            self._last_status_code = None
             logger.warning(f"Error connecting to NDMA SACHET feed: {e}. Returning cached/empty alerts.")
             return self._cached_alerts or []
 
         # Handle 304 Not Modified
         if response.status_code == 304:
+            self._last_status = "ok"
+            self._last_status_code = 304
             logger.debug("NDMA SACHET returned 304 Not Modified. Reusing cached alerts.")
             self._last_fetch_time = now
             return self._cached_alerts
 
+        if response.status_code == 403:
+            self._last_status = "waf_challenge"
+            self._last_status_code = 403
+            logger.warning(
+                "NDMA SACHET feed returned HTTP 403 (Gateway/WAF challenge). "
+                "Operating in truthful degraded alert state without fabricating emergency overrides."
+            )
+            return self._cached_alerts or []
+
         if response.status_code != 200:
+            self._last_status = "degraded"
+            self._last_status_code = response.status_code
             logger.warning(f"NDMA SACHET feed returned HTTP {response.status_code}. Reusing cached/empty alerts.")
             return self._cached_alerts or []
+
+        self._last_status = "ok"
+        self._last_status_code = 200
 
         # Update ETag and cache time
         self._etag = response.headers.get("etag") or response.headers.get("ETag")

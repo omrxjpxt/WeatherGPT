@@ -245,3 +245,20 @@ async def test_spatial_filtering_within_and_outside_polygon():
     # Point outside (Mumbai: 19.0760, 72.8777)
     active_outside = await provider.get_active_alerts(19.0760, 72.8777)
     assert len(active_outside) == 0
+
+
+@pytest.mark.asyncio
+async def test_http_403_waf_challenge_handling():
+    """When government feed returns 403 WAF challenge, provider must degrade gracefully."""
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 403
+    mock_client.get.return_value = mock_response
+
+    provider = NdmaSachetAlertProvider(client=mock_client, cache_ttl_seconds=0)
+    alerts = await provider.fetch_feed_alerts()
+
+    assert alerts == []
+    assert provider.provider_status == "waf_challenge"
+    assert provider._last_status_code == 403
+
