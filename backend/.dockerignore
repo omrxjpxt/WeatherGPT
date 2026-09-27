@@ -1,0 +1,34 @@
+# Git and VCS
+.git
+.gitignore
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*service-account*.json
+*firebase*.json
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+venv*/
+env/
+env*/
+ENV/
+
+# Tests and documentation
+tests/
+docs/
+scratch/

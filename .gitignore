@@ -49,8 +49,8 @@ app.*.map.json
 .env.*
 *.env
 backend/.env
-backend/venv/
-venv/
+backend/venv*/
+venv*/
 __pycache__/
 *.py[cod]
 .pytest_cache/

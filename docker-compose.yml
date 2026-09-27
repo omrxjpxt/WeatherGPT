@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: weathergpt-backend:latest
+    container_name: weathergpt-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - ROUTING_PROVIDER=${ROUTING_PROVIDER:-google}
+      - WEATHER_PROVIDER=${WEATHER_PROVIDER:-open-meteo}
+      - GEOCODING_PROVIDER=${GEOCODING_PROVIDER:-auto}
+      - AIR_QUALITY_PROVIDER=${AIR_QUALITY_PROVIDER:-open-meteo}
+      - AIR_QUALITY_ENABLED=${AIR_QUALITY_ENABLED:-true}
+      - GOOGLE_TRAFFIC_AWARE=${GOOGLE_TRAFFIC_AWARE:-true}
+      - ALERT_PROVIDER=${ALERT_PROVIDER:-sachet}
+      - TRANSIT_PROVIDER=${TRANSIT_PROVIDER:-dmrc}
+      - HAZARD_PROVIDER=${HAZARD_PROVIDER:-delhi_pwd}
+      - PINCODE_GEOCODING_ENABLED=${PINCODE_GEOCODING_ENABLED:-true}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - WEATHERAPI_API_KEY=${WEATHERAPI_API_KEY:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').getcode() == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
